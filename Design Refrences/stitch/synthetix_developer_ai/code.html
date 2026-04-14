@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(45, 52, 73, 0.6);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+        }
+        .syntax-keyword { color: #d0bcff; }
+        .syntax-string { color: #c0c1ff; }
+        .syntax-comment { color: #464554; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "inverse-primary": "#494bd6",
+                        "on-tertiary-fixed-variant": "#4f319c",
+                        "on-tertiary": "#381385",
+                        "primary-fixed": "#e1e0ff",
+                        "on-surface": "#dae2fd",
+                        "error": "#ffb4ab",
+                        "surface-dim": "#0b1326",
+                        "surface-container": "#171f33",
+                        "surface-bright": "#31394d",
+                        "on-error": "#690005",
+                        "on-primary-container": "#0d0096",
+                        "surface-variant": "#2d3449",
+                        "on-primary-fixed-variant": "#2f2ebe",
+                        "on-tertiary-fixed": "#21005e",
+                        "inverse-surface": "#dae2fd",
+                        "secondary-container": "#571bc1",
+                        "surface": "#0b1326",
+                        "primary-container": "#8083ff",
+                        "on-secondary-fixed-variant": "#5516be",
+                        "on-error-container": "#ffdad6",
+                        "on-surface-variant": "#c7c4d7",
+                        "surface-container-low": "#131b2e",
+                        "outline": "#908fa0",
+                        "surface-tint": "#c0c1ff",
+                        "secondary": "#d0bcff",
+                        "on-background": "#dae2fd",
+                        "surface-container-highest": "#2d3449",
+                        "tertiary-fixed": "#e8ddff",
+                        "inverse-on-surface": "#283044",
+                        "on-primary-fixed": "#07006c",
+                        "on-secondary-fixed": "#23005c",
+                        "tertiary-fixed-dim": "#cebdff",
+                        "surface-container-lowest": "#060e20",
+                        "on-tertiary-container": "#31057e",
+                        "on-secondary": "#3c0091",
+                        "tertiary-container": "#9b7fed",
+                        "outline-variant": "#464554",
+                        "on-primary": "#1000a9",
+                        "background": "#0b1326",
+                        "primary": "#c0c1ff",
+                        "tertiary": "#cebdff",
+                        "secondary-fixed-dim": "#d0bcff",
+                        "surface-container-high": "#222a3d",
+                        "secondary-fixed": "#e9ddff",
+                        "on-secondary-container": "#c4abff",
+                        "error-container": "#93000a",
+                        "primary-fixed-dim": "#c0c1ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary/30 selection:text-primary min-h-screen flex">
+<!-- SideNavBar Anchor -->
+<aside class="fixed left-0 top-0 h-screen w-20 flex flex-col items-center py-8 z-40 bg-[#060e20] dark:bg-[#060e20] shadow-[40px_0_40px_rgba(0,0,0,0.4)]">
+<div class="mb-10">
+<span class="text-transparent bg-clip-text bg-gradient-to-br from-[#c0c1ff] to-[#d0bcff] font-black text-xs tracking-tighter">SYNTHETIX</span>
+</div>
+<nav class="flex flex-col gap-8 flex-1">
+<button class="bg-gradient-to-br from-[#8083ff] to-[#571bc1] text-white rounded-xl shadow-lg w-12 h-12 flex items-center justify-center group relative">
+<span class="material-symbols-outlined">deployed_code</span>
+<span class="absolute left-16 bg-surface-container-highest px-2 py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Workspace</span>
+</button>
+<button class="text-[#c7c4d7] flex flex-col items-center justify-center gap-1 hover:bg-[#222a3d] transition-all duration-300 w-12 h-12 rounded-xl">
+<span class="material-symbols-outlined">terminal</span>
+</button>
+<button class="text-[#c7c4d7] flex flex-col items-center justify-center gap-1 hover:bg-[#222a3d] transition-all duration-300 w-12 h-12 rounded-xl">
+<span class="material-symbols-outlined">database</span>
+</button>
+<button class="text-[#c7c4d7] flex flex-col items-center justify-center gap-1 hover:bg-[#222a3d] transition-all duration-300 w-12 h-12 rounded-xl">
+<span class="material-symbols-outlined">monitoring</span>
+</button>
+</nav>
+<div class="flex flex-col gap-6 mt-auto">
+<button class="text-[#c7c4d7] hover:text-white transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<button class="text-[#c7c4d7] hover:text-white transition-colors">
+<span class="material-symbols-outlined">menu_book</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden">
+<img alt="System Identity" data-alt="close up minimalist portrait of a futuristic digital avatar in a dark aesthetic with purple backlighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAaHPqg6SEMSwP-DgaJ4S9VZjQ3fXVmKuKjZs-g1T08mmQoDPcm77GEO4GPzWSXjABfFydByNBfhE7E4rQR_57AWaHOVv8G5e6S-ieF_2p9U78zte7vV5Yav8PMRPrNt8Ymjd3kWUUG3WqSQvgyC6lqv8Y6YmiAw8_XeRp0cWcVt7043D9EH3i3YfGJQf8k6QI9K7ILoxX58-hbS6ogewW9iN7R77ZzoCfElhpJNt7T1ulctShcdgk3ab7YRHQeKkx6Lm-T5IVl9OY"/>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 ml-20 flex flex-col relative min-h-screen">
+<!-- TopNavBar Anchor -->
+<header class="fixed top-0 left-20 right-0 z-50 flex justify-between items-center px-10 h-14 bg-[#0b1326] dark:bg-[#0b1326]">
+<div class="flex items-center gap-4">
+<span class="text-[#dae2fd] font-bold tracking-widest font-['Inter'] text-[11px] uppercase">SYNTHETIX_CORE ONLINE</span>
+<div class="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_rgba(192,193,255,0.8)]"></div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-8 font-['Inter'] tracking-tight font-bold uppercase text-[11px]">
+<a class="text-[#dae2fd] border-b-2 border-[#c0c1ff] h-14 flex items-center" href="#">Console</a>
+<a class="text-[#c7c4d7] hover:text-[#dae2fd] transition-colors duration-200 h-14 flex items-center" href="#">Modules</a>
+<a class="text-[#c7c4d7] hover:text-[#dae2fd] transition-colors duration-200 h-14 flex items-center" href="#">Security</a>
+</div>
+<div class="flex items-center gap-3 ml-4">
+<button class="text-[#c0c1ff] active:opacity-80 active:scale-95">
+<span class="material-symbols-outlined">settings_input_component</span>
+</button>
+<button class="text-[#c0c1ff] active:opacity-80 active:scale-95">
+<span class="material-symbols-outlined">memory</span>
+</button>
+<button class="text-[#c0c1ff] active:opacity-80 active:scale-95">
+<span class="material-symbols-outlined">account_circle</span>
+</button>
+</div>
+</div>
+<div class="absolute bottom-0 left-0 bg-[#131b2e] h-[1px] w-full"></div>
+</header>
+<!-- Chat Flow Container -->
+<section class="flex-1 w-full max-w-4xl mx-auto px-6 pt-32 pb-48 flex flex-col gap-16">
+<!-- User Message -->
+<div class="flex flex-col items-end gap-3 max-w-[85%] self-end">
+<div class="bg-surface-container-high px-6 py-4 rounded-2xl rounded-tr-none text-on-surface leading-relaxed shadow-sm">
+                    How do I implement a secure JWT authentication flow using the Synthetix Core API?
+                </div>
+<span class="text-[10px] font-medium tracking-wider text-on-surface-variant uppercase opacity-60 px-1">User • 10:24 AM</span>
+</div>
+<!-- AI Message -->
+<div class="flex flex-col items-start gap-4 max-w-[95%] self-start">
+<div class="flex items-center gap-3 mb-1">
+<div class="w-6 h-6 rounded bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px] text-on-primary" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</div>
+<span class="text-[11px] font-bold tracking-widest text-primary uppercase">Synthetix Intelligence</span>
+</div>
+<div class="space-y-6 text-on-surface-variant leading-relaxed text-[15px]">
+<p>Implementing a JWT flow with <span class="text-primary font-medium">Synthetix Core</span> requires initializing the <code class="bg-surface-container-lowest px-1.5 py-0.5 rounded text-secondary-fixed-dim font-mono">AuthModule</code>. Here is the standard implementation for your controller:</p>
+<!-- Code Block -->
+<div class="bg-surface-container-lowest p-6 rounded-xl border border-outline-variant/10 font-mono text-[13px] relative group">
+<div class="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+<div class="space-y-1">
+<div><span class="syntax-keyword">async function</span> <span class="text-primary">initializeSecureSession</span>(user_id) {</div>
+<div class="pl-4"><span class="syntax-keyword">const</span> core = <span class="syntax-keyword">await</span> Synthetix.connect();</div>
+<div class="pl-4"><span class="syntax-keyword">const</span> payload = {</div>
+<div class="pl-8">sub: user_id,</div>
+<div class="pl-8">iat: Date.now(),</div>
+<div class="pl-8">scope: [<span class="syntax-string">'read:vault'</span>, <span class="syntax-string">'write:terminal'</span>]</div>
+<div class="pl-4">};</div>
+<div class="pl-4"><span class="syntax-comment">// Sign the token using the internal HSM module</span></div>
+<div class="pl-4"><span class="syntax-keyword">return</span> core.auth.sign(payload, { algorithm: <span class="syntax-string">'RS256'</span> });</div>
+<div>}</div>
+</div>
+</div>
+<p>Ensure your environment variables are locked using the Vault encryption before deployment.</p>
+</div>
+<div class="flex gap-2 mt-2">
+<span class="bg-tertiary-container/10 text-tertiary-fixed-dim text-[10px] px-2 py-0.5 rounded-full border border-tertiary-container/20">NodeJS v20</span>
+<span class="bg-tertiary-container/10 text-tertiary-fixed-dim text-[10px] px-2 py-0.5 rounded-full border border-tertiary-container/20">Security Optimized</span>
+</div>
+</div>
+<!-- AI Typing Indicator -->
+<div class="flex flex-col items-start gap-3 self-start">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant">auto_awesome</span>
+</div>
+<div class="flex gap-1.5 px-4 py-3 bg-surface-container-low rounded-2xl border border-outline-variant/10">
+<div class="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style="animation-delay: 0ms;"></div>
+<div class="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style="animation-delay: 200ms;"></div>
+<div class="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style="animation-delay: 400ms;"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Command Input Glass Bar -->
+<div class="fixed bottom-0 left-20 right-0 p-8 flex justify-center pointer-events-none">
+<div class="w-full max-w-3xl glass-panel p-2 rounded-[2rem] border border-outline-variant/20 shadow-2xl pointer-events-auto">
+<div class="flex items-center gap-3 pr-2">
+<button class="p-3 text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">mic</span>
+</button>
+<textarea class="flex-1 bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-on-surface-variant/40 resize-none py-3 px-2 text-[15px]" placeholder="Ask the core anything..." rows="1"></textarea>
+<div class="flex items-center gap-2">
+<button class="p-2 text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">attach_file</span>
+</button>
+<button class="bg-gradient-to-br from-primary-container to-secondary-container text-white px-6 py-2.5 rounded-full flex items-center gap-2 shadow-lg hover:brightness-110 active:scale-95 transition-all">
+<span class="text-[13px] font-bold uppercase tracking-wider">Generate</span>
+<span class="material-symbols-outlined text-[18px]">send</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Decorative UI Element -->
+<div class="fixed top-24 right-10 w-64 p-6 bg-surface-container-low/50 border border-outline-variant/5 rounded-2xl hidden xl:block">
+<div class="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant/40 mb-4">Core Statistics</div>
+<div class="space-y-4">
+<div class="flex justify-between items-end">
+<span class="text-[11px] text-on-surface-variant">Processing Load</span>
+<span class="text-[14px] font-mono text-primary">12.4%</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="w-1/4 h-full bg-gradient-to-r from-primary to-secondary"></div>
+</div>
+<div class="flex justify-between items-end">
+<span class="text-[11px] text-on-surface-variant">Uptime</span>
+<span class="text-[14px] font-mono text-on-surface">99.98%</span>
+</div>
+<div class="flex justify-between items-end">
+<span class="text-[11px] text-on-surface-variant">Neural Synapse</span>
+<span class="text-[14px] font-mono text-secondary">Active</span>
+</div>
+</div>
+</div>
+</main>
+<!-- Background Ambience -->
+<div class="fixed inset-0 -z-50 overflow-hidden pointer-events-none">
+<div class="absolute -top-[20%] -right-[10%] w-[60%] h-[60%] bg-primary/5 blur-[120px] rounded-full"></div>
+<div class="absolute -bottom-[10%] -left-[5%] w-[40%] h-[40%] bg-secondary/5 blur-[100px] rounded-full"></div>
+</div>
+</body></html>
