@@ -1,17 +1,19 @@
 export const quickSuggestions = [
-  'Analyze recent activity patterns',
-  'Generate system performance report',
-  'Review security logs',
-  'Optimize system resources',
+  'System status report',
+  'launch vscode',
+  'search for diagnostics',
+  'note Remember to push today updates to GitHub',
+  'list notes',
+  'help',
 ]
 
-export const recentActivity = [
+export const initialRecentActivity = [
   { ago: '2 min ago', label: 'System diagnostics completed' },
   { ago: '15 min ago', label: 'Project index refreshed' },
   { ago: '1 hour ago', label: 'Backup snapshot created' },
 ]
 
-export const messages = [
+export const initialMessages = [
   {
     role: 'jarvis',
     label: 'JARVIS CORE',

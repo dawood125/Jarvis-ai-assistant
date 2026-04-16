@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 
-function IntelPanel({ quickSuggestions, recentActivity, statusMeters }) {
+function IntelPanel({ quickSuggestions, recentActivity, statusMeters, onSuggestionSelect }) {
   const containerVariants = {
     hidden: { opacity: 0, x: 50 },
     show: { 
@@ -27,9 +27,13 @@ function IntelPanel({ quickSuggestions, recentActivity, statusMeters }) {
           <span className="w-1.5 h-1.5 bg-[#bf00ff] rounded-sm" /> PREDICTIVE SUGGESTIONS
         </h2>
         <ul className="flex flex-col gap-3">
-          {quickSuggestions.map((item, i) => (
+          {quickSuggestions.map((item) => (
             <motion.li key={item} whileHover={{ x: 5 }} className="cursor-pointer">
-              <button type="button" className="w-full text-left p-3 rounded-lg border border-[#bf00ff]/10 bg-[#bf00ff]/5 hover:bg-[#bf00ff]/20 hover:border-[#bf00ff]/50 transition-all text-[#d6ecff] font-['Rajdhani'] text-[14px] leading-snug">
+              <button
+                type="button"
+                onClick={() => onSuggestionSelect(item)}
+                className="w-full text-left p-3 rounded-lg border border-[#bf00ff]/10 bg-[#bf00ff]/5 hover:bg-[#bf00ff]/20 hover:border-[#bf00ff]/50 transition-all text-[#d6ecff] font-['Rajdhani'] text-[14px] leading-snug"
+              >
                 {item}
               </button>
             </motion.li>
