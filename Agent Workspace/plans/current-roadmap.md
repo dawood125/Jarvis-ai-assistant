@@ -38,6 +38,14 @@
 - Milestone 5 [done]: Wired Groq/OpenRouter client adapters with env-based switching and fallback.
 - Milestone 6 [next]: Move provider calls to secure backend/Electron bridge to avoid exposing API keys in browser.
 
+## Active Sprint - 2026-04-19
+- Milestone 1 [done]: Analyzed design reference index and extracted visual system requirements.
+- Milestone 2 [done]: Rebuilt UI into reference-style HUD layout (left vitals, center comms, right actions).
+- Milestone 3 [done]: Added particle-network animated background and HUD border effects.
+- Milestone 4 [done]: Updated shared glassmorphism and motion styles to align with reference look.
+- Milestone 5 [done]: Implemented secure provider bridge server and frontend bridge routing.
+- Milestone 6 [next]: Add explicit in-UI model settings panel and bridge health indicator.
+
 ## Session Rule
 - Daily time budget: about 1 hour
 - Suggested split: 45 min build + 15 min learning recap

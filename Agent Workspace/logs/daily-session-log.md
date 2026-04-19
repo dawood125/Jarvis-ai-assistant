@@ -38,3 +38,18 @@
 - Added .env.example template for model provider configuration.
 - Verified build success after all command architecture updates.
 - Next objective: shift provider calls to a secure backend/Electron bridge so API keys are never exposed in browser runtime.
+
+## 2026-04-19
+- Started session with explicit request to match the UI from Design Refrences/index.html before new feature work.
+- Completed milestone: deeply analyzed reference HUD structure, effects, spacing, and motion cues.
+- Completed milestone: rebuilt app into a 4-column dashboard layout with left system module, center communication panel, and right operations modules.
+- Completed milestone: implemented animated particle-network canvas background and top/bottom HUD border beams.
+- Completed milestone: aligned component visuals with shared glass-panel, glow-text, action-button, stat-bar, and wave-dot systems.
+- Completed milestone: wired dynamic telemetry updates into left vitals panel while preserving command and memory functionality.
+- Verified build success after full UI redesign pass.
+- Completed milestone: implemented secure local model bridge server at /api/model/reply with provider key isolation.
+- Completed milestone: switched frontend model client to bridge-first routing with optional direct-client fallback.
+- Added Vite dev proxy for /api and /health to simplify local bridge integration.
+- Added bridge/startup documentation and updated .env.example for secure configuration.
+- Validated bridge runtime via /health endpoint and validated frontend build after integration.
+- Next objective: build in-UI model settings and bridge health display for runtime visibility.

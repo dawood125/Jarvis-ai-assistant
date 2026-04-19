@@ -1,6 +1,16 @@
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MODEL_CALL_TIMEOUT_MS = 12000
+const DEFAULT_BRIDGE_PATH = '/api/model/reply'
+
+function resolveBridgeUrl() {
+  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  if (!baseUrl) {
+    return DEFAULT_BRIDGE_PATH
+  }
+
+  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_BRIDGE_PATH}`
+}
 
 function withTimeout(signalTimeoutMs) {
   const controller = new AbortController()
@@ -38,14 +48,55 @@ function getProviderConfig(provider) {
 }
 
 export async function requestModelReply({ provider, command }) {
+  const useBridge = import.meta.env.VITE_USE_MODEL_BRIDGE !== 'false'
   const allowClientCalls = import.meta.env.VITE_ENABLE_CLIENT_MODEL_CALLS === 'true'
+
+  if (useBridge) {
+    try {
+      const response = await fetch(resolveBridgeUrl(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider,
+          command,
+        }),
+      })
+
+      const payload = await response.json()
+
+      if (response.ok && payload?.ok) {
+        return payload
+      }
+
+      if (!allowClientCalls) {
+        return {
+          ok: false,
+          reason: payload?.reason || `bridge_http_${response.status}`,
+          reply:
+            payload?.reply ||
+            'Model bridge request failed. Start bridge server with npm run bridge and retry.',
+        }
+      }
+    } catch {
+      if (!allowClientCalls) {
+        return {
+          ok: false,
+          reason: 'bridge_unreachable',
+          reply:
+            'Model bridge is unreachable. Start bridge server with npm run bridge or configure VITE_MODEL_BRIDGE_URL.',
+        }
+      }
+    }
+  }
 
   if (!allowClientCalls) {
     return {
       ok: false,
       reason: 'client_calls_disabled',
       reply:
-        'Cloud model calls are disabled in client mode. Set VITE_ENABLE_CLIENT_MODEL_CALLS=true for local testing.',
+        'Cloud calls are disabled because secure bridge mode is not available and direct client mode is off.',
     }
   }
 

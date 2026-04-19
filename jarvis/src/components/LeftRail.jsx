@@ -1,65 +1,64 @@
-import { MessageSquare, FileText, FolderRoot, Fingerprint, Settings, Hexagon } from 'lucide-react'
 import { motion } from 'framer-motion'
-import JarvisCore from './JarvisCore'
 
-function LeftRail() {
-  const menuItems = [
-    { icon: MessageSquare, id: 'chat', label: 'NEURAL LINK' },
-    { icon: FileText, id: 'notes', label: 'DATA VAULT' },
-    { icon: FolderRoot, id: 'projects', label: 'PROJECTS' },
-    { icon: Hexagon, id: 'system', label: 'TELEMETRY' },
-  ]
+function LeftRail({ statusMeters, notes }) {
+  const safeNotes = notes && notes.length > 0 ? notes.slice(0, 4) : []
 
   return (
     <motion.aside
-      initial={{ x: -100, opacity: 0 }}
+      initial={{ x: -26, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
-      transition={{ type: 'spring', stiffness: 100, damping: 20 }}
-      className="w-[100px] flex flex-col items-center py-8 border-r border-[#00f3ff]/20 bg-[#030614]/80 backdrop-blur-xl shadow-[20px_0_40px_rgba(0,0,0,0.5)] z-20 shrink-0 h-full relative overflow-visible"
+      transition={{ duration: 0.45, ease: 'easeOut' }}
+      className="col-span-1 flex min-h-0 flex-col gap-4"
     >
-      <div className="mb-12 cursor-pointer hover:scale-110 transition-transform">
-        <JarvisCore />
-      </div>
-
-      <nav className="flex flex-col gap-10 flex-1 w-full relative pt-6">
-        {menuItems.map((item, i) => {
-          const Icon = item.icon
-          const active = i === 0
-
-          return (
-            <motion.button
-              key={item.id}
-              whileHover={{ scale: 1.15, textShadow: '0 0 8px #00f3ff' }}
-              whileTap={{ scale: 0.95 }}
-              className={`relative flex flex-col items-center gap-2 w-full transition-all duration-300 group outline-none ${
-                active ? 'text-[#00f3ff]' : 'text-[#4b6a9c]'
-              }`}
-            >
-              {active && (
-                <motion.div
-                  layoutId="active-nav-glow"
-                  className="absolute inset-0 bg-[#00f3ff]/10 blur-[15px] rounded-full w-12 h-12 left-1/2 -translate-x-1/2 -top-2 z-[-1]"
-                />
-              )}
-              {active && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-[#00f3ff] rounded-r shadow-[0_0_10px_#00f3ff]" />
-              )}
-              <Icon size={24} className={active ? 'drop-shadow-[0_0_10px_#00f3ff]' : ''} />
-              <span className="text-[9px] font-bold tracking-[0.15em] opacity-0 group-hover:opacity-100 transition-opacity absolute top-[36px] mt-2 whitespace-nowrap drop-shadow text-[#00f3ff]">
-                {item.label}
-              </span>
-            </motion.button>
-          )
-        })}
-      </nav>
-
-      <motion.div className="mt-auto flex flex-col gap-6 items-center">
-        <Settings size={22} className="text-[#4b6a9c] hover:text-[#00f3ff] cursor-pointer transition-colors" />
-        <div className="relative group cursor-pointer w-12 h-12 rounded-full overflow-hidden border-2 border-[#bf00ff]/40 shadow-[0_0_15px_rgba(191,0,255,0.3)] flex items-center justify-center bg-[#050b1e]">
-          <Fingerprint size={28} className="text-[#bf00ff] drop-shadow-[0_0_8px_#bf00ff]" />
-          <div className="absolute inset-0 bg-[#bf00ff]/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+      <section className="glass-panel flex items-center justify-center p-5">
+        <div className="arc-container">
+          <svg className="arc-ring" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="45" stroke="rgba(0,240,255,0.3)" strokeWidth="2" fill="none" strokeDasharray="10 5" />
+          </svg>
+          <svg className="arc-ring-reverse" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="35" stroke="rgba(0,240,255,0.95)" strokeWidth="1.5" fill="none" strokeDasharray="20 10" />
+          </svg>
+          <div className="core-dot" />
         </div>
-      </motion.div>
+      </section>
+
+      <section className="glass-panel p-4">
+        <h3 className="mb-3 border-b border-slate-800 pb-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">System Vitals</h3>
+        <div className="space-y-4">
+          {statusMeters.map((meter) => (
+            <div key={meter.name}>
+              <div className="mb-1 flex items-center justify-between text-xs text-slate-400">
+                <span>{meter.name}</span>
+                <span className="glow-text">{meter.valueLabel}</span>
+              </div>
+              <div className="stat-bar-bg">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: meter.width }}
+                  transition={{ duration: 0.9, ease: 'easeOut' }}
+                  className="stat-bar-fill"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="glass-panel min-h-0 flex-1 p-4">
+        <h3 className="mb-3 border-b border-slate-800 pb-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">Recent Notes</h3>
+        <div className="max-h-full space-y-2 overflow-y-auto pr-1 chat-scroll">
+          {safeNotes.length === 0 && (
+            <div className="rounded-r border-l-2 border-cyan-700 bg-slate-900/30 p-2 text-xs text-slate-500">
+              No notes yet. Try: note Your idea here.
+            </div>
+          )}
+          {safeNotes.map((note) => (
+            <div key={note.createdAt} className="rounded-r border-l-2 border-cyan-500 bg-slate-900/30 p-2 text-xs text-slate-300">
+              {note.text}
+            </div>
+          ))}
+        </div>
+      </section>
     </motion.aside>
   )
 }

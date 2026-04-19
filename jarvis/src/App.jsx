@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import ChatStage from './components/ChatStage'
+import HudBackground from './components/HudBackground'
 import IntelPanel from './components/IntelPanel'
 import LeftRail from './components/LeftRail'
 import TopBar from './components/TopBar'
-import { initialMessages, initialRecentActivity, quickSuggestions, statusMeters } from './data/mockData'
+import { initialMessages, initialRecentActivity, quickSuggestions } from './data/mockData'
 import { executeFileSearchAction, executeLaunchAppAction } from './lib/commandActions'
 import { COMMAND_TYPES, routeCommand } from './lib/commandRouter'
 import { readModelConfig, resolveModelReply } from './lib/modelRouter'
@@ -38,6 +39,18 @@ function createActivityLabel(prefix, content) {
   return `${prefix}${compact.slice(0, 40)}...`
 }
 
+function createTelemetrySnapshot() {
+  const cpu = Math.floor(Math.random() * 40) + 20
+  const memory = Math.floor(Math.random() * 30) + 40
+  const ping = Math.floor(Math.random() * 20) + 5
+
+  return {
+    cpu,
+    memory,
+    ping,
+  }
+}
+
 function App() {
   const [messages, setMessages] = useState(() => {
     try {
@@ -56,7 +69,19 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [pendingAction, setPendingAction] = useState(null)
   const [modelConfig] = useState(() => readModelConfig())
+  const [notes, setNotes] = useState(() => readStoredNotes())
+  const [telemetry, setTelemetry] = useState(() => createTelemetrySnapshot())
   const responseTimerRef = useRef(null)
+
+  const statusMeters = [
+    { name: 'CPU Load', valueLabel: `${telemetry.cpu}%`, width: `${telemetry.cpu}%` },
+    { name: 'Memory Usage', valueLabel: `${telemetry.memory}%`, width: `${telemetry.memory}%` },
+    {
+      name: 'Network Ping',
+      valueLabel: `${telemetry.ping}ms`,
+      width: `${Math.min(100, telemetry.ping * 2)}%`,
+    },
+  ]
 
   useEffect(() => {
     window.localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages))
@@ -71,10 +96,23 @@ function App() {
     [],
   )
 
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setTelemetry(createTelemetrySnapshot())
+    }, 3000)
+
+    return () => window.clearInterval(interval)
+  }, [])
+
   const now = new Date().toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
+    hour12: false,
+  })
+
+  const dateText = new Date().toLocaleDateString([], {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
   })
 
   const queueJarvisReply = (replyText) => {
@@ -153,6 +191,7 @@ function App() {
       ].slice(0, 100)
 
       writeStoredNotes(updatedNotes)
+      setNotes(updatedNotes)
       replyText = `Note stored locally. Total notes in memory: ${updatedNotes.length}.`
       setRecentActivity((prev) => [
         {
@@ -164,8 +203,6 @@ function App() {
     }
 
     if (routeResult.action?.type === COMMAND_TYPES.LIST_NOTES) {
-      const notes = readStoredNotes()
-
       if (notes.length === 0) {
         replyText = 'No local notes found yet. Use: note <your text>'
       } else {
@@ -194,7 +231,7 @@ function App() {
       const searchResult = executeFileSearchAction(routeResult.action, {
         messages,
         recentActivity,
-        notes: readStoredNotes(),
+        notes,
       })
       replyText = searchResult.reply
       setRecentActivity((prev) => [searchResult.activityEntry, ...prev].slice(0, 6))
@@ -224,32 +261,28 @@ function App() {
   }
 
   return (
-    <div className="flex w-full h-screen bg-[#02040a] overflow-hidden text-[#edf3ff]">
-      {/* 3D background element */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute top-[-20%] right-[-10%] w-200 h-200 bg-[#bf00ff]/10 blur-[150px] mix-blend-screen rounded-full" />
-        <div className="absolute bottom-[-20%] left-[-10%] w-150 h-150 bg-[#00f3ff]/10 blur-[150px] mix-blend-screen rounded-full" />
-        {/* Simple CSS Grid pattern for the FUI look */}
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(0,243,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(0,243,255,0.03)_1px,transparent_1px)] bg-size-[40px_40px] transform-[perspective(1000px)_rotateX(60deg)_translateY(-100px)_scale(2.5)] opacity-40 origin-top" />
-      </div>
+    <div className="relative h-screen w-full overflow-hidden bg-[#050a14] text-white">
+      <HudBackground />
 
-      <LeftRail />
+      <main className="relative z-10 h-full p-4 md:p-5">
+        <div className="flex h-full flex-col gap-4">
+          <TopBar now={now} dateText={dateText} />
 
-      <main className="flex flex-col flex-1 relative z-10 w-full min-w-0">
-        <TopBar now={now} />
-
-        <div className="flex flex-1 p-6 gap-6 h-[calc(100vh-70px)]">
-          <ChatStage
-            messages={messages}
-            onSubmitCommand={handleCommand}
-            isProcessing={isProcessing}
-          />
-          <IntelPanel
-            quickSuggestions={quickSuggestions}
-            recentActivity={recentActivity}
-            statusMeters={statusMeters}
-            onSuggestionSelect={handleCommand}
-          />
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-4">
+            <LeftRail statusMeters={statusMeters} notes={notes} />
+            <div className="lg:col-span-2 min-h-0">
+              <ChatStage
+                messages={messages}
+                onSubmitCommand={handleCommand}
+                isProcessing={isProcessing}
+              />
+            </div>
+            <IntelPanel
+              quickSuggestions={quickSuggestions}
+              recentActivity={recentActivity}
+              onSuggestionSelect={handleCommand}
+            />
+          </div>
         </div>
       </main>
     </div>

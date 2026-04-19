@@ -1,16 +1,35 @@
-# React + Vite
+# Jarvis Frontend Workspace
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This workspace contains the Jarvis HUD-style React client plus a secure local model bridge server.
 
-Currently, two official plugins are available:
+## Scripts
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- npm run dev: starts Vite frontend at http://localhost:5173
+- npm run bridge: starts secure model bridge at http://localhost:8787
+- npm run build: production build validation
 
-## React Compiler
+## Recommended Local Run Flow
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Use two terminals:
 
-## Expanding the ESLint configuration
+1. Terminal A
+- npm run bridge
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+2. Terminal B
+- npm run dev
+
+The frontend uses /api/model/reply and /health via Vite proxy to reach the bridge.
+
+## Environment Setup
+
+Copy .env.example to .env and configure:
+
+- GROQ_API_KEY and optional GROQ_MODEL
+- OPENROUTER_API_KEY and optional OPENROUTER_MODEL
+- VITE_USE_MODEL_BRIDGE=true
+
+By default, cloud calls are routed through the secure bridge so provider keys are not exposed in browser runtime.
+
+## Security Note
+
+Do not commit real API keys. Keep them only in local .env files.

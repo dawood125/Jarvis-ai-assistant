@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>J.A.R.V.I.S. Interface</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --cyan: #00f0ff;
+            --cyan-dim: rgba(0, 240, 255, 0.3);
+            --cyan-glow: rgba(0, 240, 255, 0.6);
+            --dark-bg: #050a14;
+            --panel-bg: rgba(5, 15, 30, 0.6);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background-color: var(--dark-bg);
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Particle Canvas */
+        #particles-canvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 0;
+        }
+
+        /* Main Container */
+        .hud-container {
+            position: relative;
+            z-index: 10;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        /* Glassmorphism Panels */
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--cyan-dim);
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.05), inset 0 0 20px rgba(0, 240, 255, 0.02);
+            border-radius: 12px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .glass-panel::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+            opacity: 0.5;
+        }
+
+        /* JARVIS Arc Animation */
+        .arc-container {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            margin: 0 auto;
+        }
+
+        .arc-svg {
+            width: 100%; height: 100%;
+            animation: rotateArc 10s linear infinite;
+        }
+
+        .arc-svg-reverse {
+            width: 100%; height: 100%;
+            position: absolute;
+            top: 0; left: 0;
+            animation: rotateArc 7s linear infinite reverse;
+        }
+
+        .core-dot {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 15px; height: 15px;
+            background: var(--cyan);
+            border-radius: 50%;
+            box-shadow: 0 0 20px var(--cyan-glow), 0 0 40px var(--cyan-dim);
+            animation: pulseCore 2s ease-in-out infinite;
+        }
+
+        @keyframes rotateArc { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes pulseCore { 0%, 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 50% { opacity: 0.6; transform: translate(-50%, -50%) scale(0.8); } }
+
+        /* Glowing Text */
+        .glow-text {
+            text-shadow: 0 0 10px var(--cyan-glow), 0 0 20px var(--cyan-dim);
+            color: var(--cyan);
+        }
+
+        .breathing-text {
+            animation: breathe 3s ease-in-out infinite;
+        }
+
+        @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+        /* Stats Bars */
+        .stat-bar-bg {
+            background: rgba(0, 240, 255, 0.1);
+            border-radius: 4px;
+            height: 6px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .stat-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--cyan-dim), var(--cyan));
+            box-shadow: 0 0 10px var(--cyan-glow);
+            border-radius: 4px;
+            transition: width 1s ease-in-out;
+        }
+
+        /* Chat Area */
+        .chat-area {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--cyan-dim) transparent;
+        }
+
+        .chat-area::-webkit-scrollbar { width: 4px; }
+        .chat-area::-webkit-scrollbar-track { background: transparent; }
+        .chat-area::-webkit-scrollbar-thumb { background: var(--cyan-dim); border-radius: 4px; }
+
+        .message-jarvis {
+            animation: slideInLeft 0.3s ease-out forwards;
+            opacity: 0;
+        }
+
+        .message-user {
+            animation: slideInRight 0.3s ease-out forwards;
+            opacity: 0;
+        }
+
+        @keyframes slideInLeft { from { transform: translateX(-20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes slideInRight { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        /* Input Field */
+        .chat-input {
+            background: rgba(0, 240, 255, 0.05);
+            border: 1px solid var(--cyan-dim);
+            color: white;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .chat-input:focus {
+            border-color: var(--cyan);
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.2);
+            background: rgba(0, 240, 255, 0.08);
+        }
+
+        .chat-input::placeholder { color: rgba(0, 240, 255, 0.4); }
+
+        /* Action Buttons */
+        .action-btn {
+            background: rgba(0, 240, 255, 0.05);
+            border: 1px solid rgba(0, 240, 255, 0.3);
+            color: var(--cyan);
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .action-btn:hover {
+            background: rgba(0, 240, 255, 0.15);
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.2);
+            transform: translateY(-2px);
+            border-color: var(--cyan);
+        }
+
+        .action-btn::after {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%;
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.1), transparent);
+            transition: 0.5s;
+        }
+
+        .action-btn:hover::after { left: 100%; }
+
+        /* Wave animation for thinking */
+        .wave-dot {
+            display: inline-block;
+            width: 6px; height: 6px;
+            background: var(--cyan);
+            border-radius: 50%;
+            margin: 0 2px;
+            animation: wave 1.3s infinite ease-in-out;
+        }
+        .wave-dot:nth-child(2) { animation-delay: 0.1s; }
+        .wave-dot:nth-child(3) { animation-delay: 0.2s; }
+
+        @keyframes wave { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; } 40% { transform: scale(1); opacity: 1; } }
+
+        /* Top/Bottom decorative borders */
+        .hud-border-top, .hud-border-bottom {
+            position: fixed;
+            left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--cyan-dim), var(--cyan), var(--cyan-dim), transparent);
+            z-index: 20;
+        }
+        .hud-border-top { top: 0; }
+        .hud-border-bottom { bottom: 0; }
+    </style>
+</head>
+<body>
+
+    <!-- Particle Background -->
+    <canvas id="particles-canvas"></canvas>
+
+    <!-- Decorative HUD Borders -->
+    <div class="hud-border-top"></div>
+    <div class="hud-border-bottom"></div>
+
+    <!-- Main UI -->
+    <div class="hud-container">
+        
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-6 px-4">
+            <div class="flex items-center gap-4">
+                <h1 class="text-2xl font-bold tracking-widest glow-text breathing-text">J.A.R.V.I.S.</h1>
+                <span class="text-xs text-gray-500 tracking-wider">v1.0 // DAWOOD'S SYSTEM</span>
+            </div>
+            <div class="text-right">
+                <div id="clock" class="text-xl font-mono glow-text tracking-wider">00:00:00</div>
+                <div id="date" class="text-xs text-gray-500 tracking-wider"></div>
+            </div>
+        </header>
+
+        <!-- Dashboard Grid -->
+        <div class="grid grid-cols-4 gap-5 flex-grow overflow-hidden">
+            
+            <!-- Left Panel: Stats & Status -->
+            <div class="col-span-1 flex flex-col gap-5">
+                
+                <!-- Arc Animation -->
+                <div class="glass-panel p-5 flex flex-col items-center justify-center">
+                    <div class="arc-container">
+                        <svg class="arc-svg" viewBox="0 0 100 100">
+                            <circle cx="50" cy="50" r="45" stroke="var(--cyan-dim)" stroke-width="2" fill="none" stroke-dasharray="10 5" />
+                        </svg>
+                        <svg class="arc-svg-reverse" viewBox="0 0 100 100">
+                            <circle cx="50" cy="50" r="35" stroke="var(--cyan)" stroke-width="1.5" fill="none" stroke-dasharray="20 10" />
+                        </svg>
+                        <div class="core-dot"></div>
+                    </div>
+                    <div class="mt-4 text-xs text-gray-400 tracking-wider uppercase">System Online</div>
+                </div>
+
+                <!-- System Stats -->
+                <div class="glass-panel p-5 flex flex-col gap-4">
+                    <h3 class="text-xs tracking-widest uppercase text-gray-400 mb-2 border-b border-gray-800 pb-2">System Vitals</h3>
+                    
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span className="text-gray-400">CPU Load</span>
+                            <span class="glow-text" id="cpu-val">32%</span>
+                        </div>
+                        <div class="stat-bar-bg"><div class="stat-bar-fill" id="cpu-bar" style="width: 32%"></div></div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span className="text-gray-400">Memory Usage</span>
+                            <span class="glow-text" id="ram-val">48%</span>
+                        </div>
+                        <div class="stat-bar-bg"><div class="stat-bar-fill" id="ram-bar" style="width: 48%"></div></div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span className="text-gray-400">Network Ping</span>
+                            <span class="glow-text" id="ping-val">12ms</span>
+                        </div>
+                        <div class="stat-bar-bg"><div class="stat-bar-fill" id="ping-bar" style="width: 12%"></div></div>
+                    </div>
+                </div>
+
+                <!-- Quick Notes -->
+                <div class="glass-panel p-5 flex-grow flex flex-col">
+                    <h3 class="text-xs tracking-widest uppercase text-gray-400 mb-3 border-b border-gray-800 pb-2">Recent Notes</h3>
+                    <div class="text-xs text-gray-500 space-y-2 overflow-y-auto flex-grow">
+                        <div class="p-2 border-l-2 border-cyan-500 bg-gray-900/30 rounded-r">"Meeting at 3pm tomorrow"</div>
+                        <div class="p-2 border-l-2 border-cyan-800 bg-gray-900/30 rounded-r">"Buy groceries"</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Center Panel: Chat Interface -->
+            <div class="col-span-2 glass-panel flex flex-col">
+                <div class="px-5 py-3 border-b border-gray-800 flex justify-between items-center">
+                    <span class="text-xs tracking-widest uppercase text-gray-400">Communication Link</span>
+                    <span class="flex items-center gap-2 text-xs text-green-400"><span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span> Secure</span>
+                </div>
+                
+                <div class="chat-area" id="chat-area">
+                    <!-- Messages will be injected here -->
+                    <div class="flex justify-start mb-4 message-jarvis">
+                        <div class="max-w-[80%] bg-gray-900/50 border border-gray-800 rounded-lg p-4 shadow-lg">
+                            <p class="text-sm text-gray-300">Good evening, sir. All systems are nominal. How may I assist you today?</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-4 border-t border-gray-800 flex items-center gap-4">
+                    <span class="glow-text text-lg"><i class="fas fa-chevron-right"></i></span>
+                    <input type="text" id="chat-input" class="chat-input w-full px-4 py-3 rounded-lg text-sm" placeholder="Enter command or speak to JARVIS..." autocomplete="off">
+                    <button id="send-btn" class="action-btn px-4 py-3 rounded-lg text-sm font-bold tracking-wider">SEND</button>
+                </div>
+            </div>
+
+            <!-- Right Panel: Actions & Projects -->
+            <div class="col-span-1 flex flex-col gap-5">
+                
+                <div class="glass-panel p-5">
+                    <h3 class="text-xs tracking-widest uppercase text-gray-400 mb-3 border-b border-gray-800 pb-2">Quick Actions</h3>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button class="action-btn p-3 rounded-lg text-center flex flex-col items-center gap-1">
+                            <i class="fas fa-code text-lg"></i>
+                            <span class="text-[10px] tracking-wider">VS CODE</span>
+                        </button>
+                        <button class="action-btn p-3 rounded-lg text-center flex flex-col items-center gap-1">
+                            <i class="fab fa-chrome text-lg"></i>
+                            <span class="text-[10px] tracking-wider">CHROME</span>
+                        </button>
+                        <button class="action-btn p-3 rounded-lg text-center flex flex-col items-center gap-1">
+                            <i class="fas fa-music text-lg"></i>
+                            <span class="text-[10px] tracking-wider">MUSIC</span>
+                        </button>
+                        <button class="action-btn p-3 rounded-lg text-center flex flex-col items-center gap-1">
+                            <i class="fas fa-terminal text-lg"></i>
+                            <span class="text-[10px] tracking-wider">TERMINAL</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="glass-panel p-5 flex-grow">
+                    <h3 class="text-xs tracking-widest uppercase text-gray-400 mb-3 border-b border-gray-800 pb-2">Active Projects</h3>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between p-2 bg-gray-900/30 rounded border-l-2 border-blue-400">
+                            <span class="text-xs text-gray-300">FreelanceHub</span>
+                            <span class="text-[10px] text-blue-400">MERN</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2 bg-gray-900/30 rounded border-l-2 border-red-400">
+                            <span class="text-xs text-gray-300">Portfolio V2</span>
+                            <span class="text-[10px] text-red-400">NEXT</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2 bg-gray-900/30 rounded border-l-2 border-purple-400">
+                            <span class="text-xs text-gray-300">JARVIS UI</span>
+                            <span class="text-[10px] text-purple-400">NODE</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-panel p-5">
+                    <h3 class="text-xs tracking-widest uppercase text-gray-400 mb-2">Weather</h3>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-2xl font-bold glow-text">28°C</div>
+                            <div class="text-[10px] text-gray-500 uppercase tracking-wider">Sheikhupura</div>
+                        </div>
+                        <i class="fas fa-cloud-sun text-3xl text-yellow-500 opacity-70"></i>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. PARTICLE NETWORK BACKGROUND ---
+        const canvas = document.getElementById('particles-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 1.5 + 0.5;
+                this.speedX = (Math.random() - 0.5) * 0.5;
+                this.speedY = (Math.random() - 0.5) * 0.5;
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                if (this.x < 0 || this.x > canvas.width) this.speedX *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.speedY *= -1;
+            }
+            draw() {
+                ctx.fillStyle = 'rgba(0, 240, 255, 0.5)';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function initParticles() {
+            particles = [];
+            for (let i = 0; i < 60; i++) { // Keep at 60 for 8GB RAM performance
+                particles.push(new Particle());
+            }
+        }
+
+        function connectParticles() {
+            for (let a = 0; a < particles.length; a++) {
+                for (let b = a + 1; b < particles.length; b++) {
+                    const dx = particles[a].x - particles[b].x;
+                    const dy = particles[a].y - particles[b].y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < 150) {
+                        ctx.strokeStyle = `rgba(0, 240, 255, ${0.1 - (distance / 1500)})`;
+                        ctx.lineWidth = 0.5;
+                        ctx.beginPath();
+                        ctx.moveTo(particles[a].x, particles[a].y);
+                        ctx.lineTo(particles[b].x, particles[b].y);
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => { p.update(); p.draw(); });
+            connectParticles();
+            requestAnimationFrame(animateParticles);
+        }
+        initParticles();
+        animateParticles();
+
+        // --- 2. CLOCK & DATE ---
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString('en-US', { hour12: false });
+            document.getElementById('date').innerText = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // --- 3. FAKE SYSTEM STATS (For UI Demo) ---
+        function updateStats() {
+            const cpu = Math.floor(Math.random() * 40) + 20;
+            const ram = Math.floor(Math.random() * 30) + 40;
+            const ping = Math.floor(Math.random() * 20) + 5;
+            
+            document.getElementById('cpu-val').innerText = `${cpu}%`;
+            document.getElementById('cpu-bar').style.width = `${cpu}%`;
+            
+            document.getElementById('ram-val').innerText = `${ram}%`;
+            document.getElementById('ram-bar').style.width = `${ram}%`;
+            
+            document.getElementById('ping-val').innerText = `${ping}ms`;
+            document.getElementById('ping-bar').style.width = `${ping * 2}%`;
+        }
+        setInterval(updateStats, 3000); // Update every 3 seconds
+
+        // --- 4. CHAT LOGIC (UI ONLY) ---
+        const chatArea = document.getElementById('chat-area');
+        const chatInput = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('send-btn');
+
+        // Simulated JARVIS responses for UI testing
+        const jarvisResponses = [
+            "Right away, sir. Initializing systems.",
+            "I've noted that down. Anything else you need?",
+            "Processing your request. The results look promising.",
+            "Shall I open VS Code, or would you prefer a different environment today?",
+            "Your schedule is clear for the next 3 hours. Perfect time for deep work.",
+            "I've analyzed the data. It seems we have an optimal path forward.",
+            "Consider it done. Is there anything else on your mind, sir?",
+            "Running diagnostics now. All systems are operating at peak efficiency."
+        ];
+
+        function addMessage(text, sender) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `flex mb-4 ${sender === 'user' ? 'justify-end message-user' : 'justify-start message-jarvis'}`;
+            
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = `max-w-[80%] ${sender === 'user' ? 'bg-cyan-900/30 border border-cyan-800' : 'bg-gray-900/50 border border-gray-800'} rounded-lg p-4 shadow-lg`;
+            
+            const textP = document.createElement('p');
+            textP.className = "text-sm text-gray-300";
+            textP.innerText = text;
+            
+            bubbleDiv.appendChild(textP);
+            msgDiv.appendChild(bubbleDiv);
+            chatArea.appendChild(msgDiv);
+            
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function showThinking() {
+            const thinkDiv = document.createElement('div');
+            thinkDiv.id = 'thinking-indicator';
+            thinkDiv.className = 'flex justify-start mb-4 message-jarvis';
+            thinkDiv.innerHTML = `
+                <div class="bg-gray-900/50 border border-gray-800 rounded-lg p-4 shadow-lg flex items-center gap-2">
+                    <span class="wave-dot"></span>
+                    <span class="wave-dot"></span>
+                    <span class="wave-dot"></span>
+                </div>
+            `;
+            chatArea.appendChild(thinkDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function removeThinking() {
+            const thinkDiv = document.getElementById('thinking-indicator');
+            if (thinkDiv) thinkDiv.remove();
+        }
+
+        function handleSend() {
+            const text = chatInput.value.trim();
+            if (!text) return;
+
+            addMessage(text, 'user');
+            chatInput.value = '';
+
+            // Show thinking animation
+            showThinking();
+
+            // Simulate AI response delay
+            setTimeout(() => {
+                removeThinking();
+                const randomResponse = jarvisResponses[Math.floor(Math.random() * jarvisResponses.length)];
+                addMessage(randomResponse, 'jarvis');
+            }, 1500 + Math.random() * 1000); // 1.5s to 2.5s delay
+        }
+
+        sendBtn.addEventListener('click', handleSend);
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleSend();
+        });
+
+    </script>
+</body>
+</html>
