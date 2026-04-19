@@ -67,8 +67,8 @@ function getProviderConfig(provider) {
   if (provider === 'groq') {
     return {
       endpoint: 'https://api.groq.com/openai/v1/chat/completions',
-      apiKey: process.env.GROQ_API_KEY,
-      model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
+      apiKey: process.env.GROQ_API_KEY || process.env.GROK_API_KEY,
+      model: process.env.GROQ_MODEL || process.env.GROK_MODEL || 'llama-3.1-8b-instant',
       headers: {},
     }
   }
@@ -188,7 +188,7 @@ const server = createServer(async (req, res) => {
         ok: true,
         service: 'jarvis-model-bridge',
         providers: {
-          groq: Boolean(process.env.GROQ_API_KEY),
+          groq: Boolean(process.env.GROQ_API_KEY || process.env.GROK_API_KEY),
           openrouter: Boolean(process.env.OPENROUTER_API_KEY),
         },
       },

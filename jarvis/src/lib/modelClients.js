@@ -2,6 +2,7 @@ const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MODEL_CALL_TIMEOUT_MS = 12000
 const DEFAULT_BRIDGE_PATH = '/api/model/reply'
+const DEFAULT_BRIDGE_HEALTH_PATH = '/health'
 
 function resolveBridgeUrl() {
   const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
@@ -10,6 +11,47 @@ function resolveBridgeUrl() {
   }
 
   return `${baseUrl.replace(/\/$/, '')}${DEFAULT_BRIDGE_PATH}`
+}
+
+function resolveBridgeHealthUrl() {
+  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  if (!baseUrl) {
+    return DEFAULT_BRIDGE_HEALTH_PATH
+  }
+
+  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_BRIDGE_HEALTH_PATH}`
+}
+
+export async function fetchBridgeHealth() {
+  try {
+    const response = await fetch(resolveBridgeHealthUrl())
+    if (!response.ok) {
+      return {
+        status: 'offline',
+        providers: {
+          groq: false,
+          openrouter: false,
+        },
+      }
+    }
+
+    const payload = await response.json()
+    return {
+      status: 'online',
+      providers: {
+        groq: Boolean(payload?.providers?.groq),
+        openrouter: Boolean(payload?.providers?.openrouter),
+      },
+    }
+  } catch {
+    return {
+      status: 'offline',
+      providers: {
+        groq: false,
+        openrouter: false,
+      },
+    }
+  }
 }
 
 function withTimeout(signalTimeoutMs) {

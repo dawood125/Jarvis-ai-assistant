@@ -7,7 +7,8 @@ import TopBar from './components/TopBar'
 import { initialMessages, initialRecentActivity, quickSuggestions } from './data/mockData'
 import { executeFileSearchAction, executeLaunchAppAction } from './lib/commandActions'
 import { COMMAND_TYPES, routeCommand } from './lib/commandRouter'
-import { readModelConfig, resolveModelReply } from './lib/modelRouter'
+import { fetchBridgeHealth } from './lib/modelClients'
+import { readModelConfig, resolveModelReply, writeModelConfig } from './lib/modelRouter'
 
 const CHAT_STORAGE_KEY = 'jarvis.chat.history.v1'
 const NOTES_STORAGE_KEY = 'jarvis.notes.v1'
@@ -68,7 +69,14 @@ function App() {
   const [recentActivity, setRecentActivity] = useState(initialRecentActivity)
   const [isProcessing, setIsProcessing] = useState(false)
   const [pendingAction, setPendingAction] = useState(null)
-  const [modelConfig] = useState(() => readModelConfig())
+  const [modelConfig, setModelConfig] = useState(() => readModelConfig())
+  const [bridgeHealth, setBridgeHealth] = useState({
+    status: 'unknown',
+    providers: {
+      groq: false,
+      openrouter: false,
+    },
+  })
   const [notes, setNotes] = useState(() => readStoredNotes())
   const [telemetry, setTelemetry] = useState(() => createTelemetrySnapshot())
   const responseTimerRef = useRef(null)
@@ -103,6 +111,22 @@ function App() {
 
     return () => window.clearInterval(interval)
   }, [])
+
+  const refreshBridgeHealth = () => {
+    fetchBridgeHealth().then((health) => {
+      setBridgeHealth(health)
+    })
+  }
+
+  useEffect(() => {
+    refreshBridgeHealth()
+    const interval = window.setInterval(refreshBridgeHealth, 15000)
+    return () => window.clearInterval(interval)
+  }, [])
+
+  const handleModelConfigChange = (partialConfig) => {
+    setModelConfig((prev) => writeModelConfig({ ...prev, ...partialConfig }))
+  }
 
   const now = new Date().toLocaleTimeString([], {
     hour12: false,
@@ -266,7 +290,7 @@ function App() {
 
       <main className="relative z-10 h-full p-4 md:p-5">
         <div className="flex h-full flex-col gap-4">
-          <TopBar now={now} dateText={dateText} />
+          <TopBar now={now} dateText={dateText} bridgeHealth={bridgeHealth} />
 
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-4">
             <LeftRail statusMeters={statusMeters} notes={notes} />
@@ -281,6 +305,10 @@ function App() {
               quickSuggestions={quickSuggestions}
               recentActivity={recentActivity}
               onSuggestionSelect={handleCommand}
+              modelConfig={modelConfig}
+              bridgeHealth={bridgeHealth}
+              onRefreshBridgeHealth={refreshBridgeHealth}
+              onModelConfigChange={handleModelConfigChange}
             />
           </div>
         </div>

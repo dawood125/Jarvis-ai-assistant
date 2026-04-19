@@ -5,13 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "bridge": "node server/modelBridgeServer.js",
+    "bridge": "node -r dotenv/config server/modelBridgeServer.js",
+    "dev:bridge": "node -r dotenv/config server/modelBridgeServer.js",
     "dev:client": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "dotenv": "^17.2.3",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.8.0",
     "react": "^19.2.4",

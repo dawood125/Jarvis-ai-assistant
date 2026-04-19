@@ -52,4 +52,10 @@
 - Added Vite dev proxy for /api and /health to simplify local bridge integration.
 - Added bridge/startup documentation and updated .env.example for secure configuration.
 - Validated bridge runtime via /health endpoint and validated frontend build after integration.
-- Next objective: build in-UI model settings and bridge health display for runtime visibility.
+- Diagnosed API key issue: bridge on default port had old runtime without .env-loaded keys.
+- Implemented fix: bridge startup now uses dotenv preload (node -r dotenv/config ...).
+- Added compatibility for GROQ/GROK env key naming in bridge server.
+- Completed milestone: added in-UI cloud routing controls and live bridge health/key presence indicators.
+- Improved command parsing for list note/list notes command forms.
+- Verified patched bridge health on alternate port shows providers.groq=true and providers.openrouter=true with current .env.
+- Next objective: improve natural-language note/action extraction for non-command phrasing.

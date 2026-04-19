@@ -112,7 +112,14 @@ export function routeCommand(command, statusMeters) {
     }
   }
 
-  if (normalized === 'list notes' || normalized === 'show notes' || normalized === 'view notes') {
+  if (
+    normalized === 'list notes' ||
+    normalized === 'list note' ||
+    normalized === 'show notes' ||
+    normalized === 'show note' ||
+    normalized === 'view notes' ||
+    normalized === 'view note'
+  ) {
     return {
       reply: 'Loading notes from local memory...',
       action: {

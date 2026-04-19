@@ -44,7 +44,8 @@
 - Milestone 3 [done]: Added particle-network animated background and HUD border effects.
 - Milestone 4 [done]: Updated shared glassmorphism and motion styles to align with reference look.
 - Milestone 5 [done]: Implemented secure provider bridge server and frontend bridge routing.
-- Milestone 6 [next]: Add explicit in-UI model settings panel and bridge health indicator.
+- Milestone 6 [done]: Added in-UI model settings panel and live bridge health indicators.
+- Milestone 7 [next]: Connect notes/action commands to richer natural-language intent mapping.
 
 ## Session Rule
 - Daily time budget: about 1 hour

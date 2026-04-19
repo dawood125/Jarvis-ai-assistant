@@ -1,6 +1,8 @@
 import { motion } from 'framer-motion'
 
-function TopBar({ now, dateText }) {
+function TopBar({ now, dateText, bridgeHealth }) {
+  const bridgeOnline = bridgeHealth?.status === 'online'
+
   return (
     <motion.header
       initial={{ y: -24, opacity: 0 }}
@@ -16,6 +18,12 @@ function TopBar({ now, dateText }) {
       </div>
 
       <div className="text-right">
+        <div className="mb-1 flex items-center justify-end gap-2">
+          <span className={`h-2 w-2 rounded-full ${bridgeOnline ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+          <span className={`text-[10px] tracking-[0.16em] ${bridgeOnline ? 'text-emerald-400' : 'text-rose-400'}`}>
+            BRIDGE {bridgeOnline ? 'ONLINE' : 'OFFLINE'}
+          </span>
+        </div>
         <div className="glow-text text-lg font-medium tracking-[0.16em] md:text-xl">{now}</div>
         <div className="text-[10px] tracking-[0.15em] text-slate-500 md:text-xs">{dateText}</div>
       </div>

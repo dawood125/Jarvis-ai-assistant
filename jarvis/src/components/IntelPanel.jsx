@@ -1,6 +1,14 @@
 import { motion } from 'framer-motion'
 
-function IntelPanel({ quickSuggestions, recentActivity, onSuggestionSelect }) {
+function IntelPanel({
+  quickSuggestions,
+  recentActivity,
+  onSuggestionSelect,
+  modelConfig,
+  bridgeHealth,
+  onRefreshBridgeHealth,
+  onModelConfigChange,
+}) {
   const containerVariants = {
     hidden: { opacity: 0, x: 50 },
     show: { 
@@ -34,6 +42,73 @@ function IntelPanel({ quickSuggestions, recentActivity, onSuggestionSelect }) {
       animate="show"
       className="col-span-1 flex min-h-0 flex-col gap-4"
     >
+      <motion.section variants={itemVariants} className="glass-panel p-4">
+        <h2 className="mb-3 border-b border-slate-800 pb-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">
+          Model Routing
+        </h2>
+
+        <div className="space-y-3 text-xs">
+          <div className="flex items-center justify-between rounded border border-slate-800 bg-slate-900/35 p-2">
+            <span className="text-slate-300">Cloud Routing</span>
+            <button
+              type="button"
+              onClick={() => onModelConfigChange({ allowCloud: !modelConfig.allowCloud })}
+              className={`rounded px-2 py-1 text-[10px] tracking-[0.12em] ${
+                modelConfig.allowCloud ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-300'
+              }`}
+            >
+              {modelConfig.allowCloud ? 'ENABLED' : 'DISABLED'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex flex-col gap-1 text-slate-400">
+              Primary
+              <select
+                value={modelConfig.primary}
+                onChange={(event) => onModelConfigChange({ primary: event.target.value })}
+                className="rounded border border-slate-800 bg-slate-900/40 px-2 py-1 text-slate-200"
+              >
+                <option value="groq">Groq</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="local-fallback">Local</option>
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1 text-slate-400">
+              Fallback
+              <select
+                value={modelConfig.fallback}
+                onChange={(event) => onModelConfigChange({ fallback: event.target.value })}
+                className="rounded border border-slate-800 bg-slate-900/40 px-2 py-1 text-slate-200"
+              >
+                <option value="openrouter">OpenRouter</option>
+                <option value="groq">Groq</option>
+                <option value="local-fallback">Local</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between rounded border border-slate-800 bg-slate-900/35 p-2">
+            <div className="space-y-1">
+              <div className={`text-[10px] tracking-[0.14em] ${bridgeHealth.status === 'online' ? 'text-emerald-300' : 'text-rose-300'}`}>
+                BRIDGE {bridgeHealth.status === 'online' ? 'ONLINE' : 'OFFLINE'}
+              </div>
+              <div className="text-[10px] text-slate-500">
+                Groq key: {bridgeHealth.providers.groq ? 'yes' : 'no'} | OpenRouter key: {bridgeHealth.providers.openrouter ? 'yes' : 'no'}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onRefreshBridgeHealth}
+              className="action-btn rounded px-2 py-1 text-[10px] tracking-[0.12em]"
+            >
+              REFRESH
+            </button>
+          </div>
+        </div>
+      </motion.section>
+
       <motion.section variants={itemVariants} className="glass-panel p-4">
         <h2 className="mb-3 border-b border-slate-800 pb-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">
           Quick Actions
