@@ -1,4 +1,14 @@
 const MAX_SEARCH_RESULTS = 4
+const DEFAULT_SYSTEM_LAUNCH_PATH = '/api/system/launch'
+
+function resolveSystemLaunchUrl() {
+  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  if (!baseUrl) {
+    return DEFAULT_SYSTEM_LAUNCH_PATH
+  }
+
+  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_SYSTEM_LAUNCH_PATH}`
+}
 
 function createActivityEntry(label) {
   return {
@@ -29,7 +39,7 @@ export function executeLaunchAppAction(action, options = {}) {
     return {
       reply:
         `Launch contract ready for ${target}, but I could not map it to a known app yet. ` +
-        'Try names like: VS Code, terminal, Chrome, or Spotify.',
+        'Try names like: VS Code, terminal, Chrome, Spotify, or a website URL.',
       activityEntry: createActivityEntry(truncateLabel('Launch staged: ', target)),
     }
   }
@@ -48,6 +58,81 @@ export function executeLaunchAppAction(action, options = {}) {
       `Launch contract prepared for ${resolvedTarget.label}. ` +
       'Execution remains in preview mode until system-action confirmation is enabled.',
     activityEntry: createActivityEntry(`Launch staged: ${resolvedTarget.label}`),
+  }
+}
+
+export async function executeConfirmedLaunchAppAction(action, context = {}) {
+  const target = action?.payload?.target || 'target app'
+  const resolvedTarget = action?.payload?.resolvedTarget
+
+  if (!resolvedTarget) {
+    return {
+      reply:
+        `Launch contract ready for ${target}, but I could not map it to a known app yet. ` +
+        'Try names like: VS Code, terminal, Chrome, Spotify, or a website URL.',
+      activityEntry: createActivityEntry(truncateLabel('Launch failed: ', target)),
+    }
+  }
+
+  const bridgeOnline = context?.bridgeHealth?.status === 'online'
+  const bridgeAllowsSystemActions = Boolean(context?.bridgeHealth?.systemActionsEnabled)
+  const clientAllowsSystemActions = import.meta.env.VITE_ENABLE_SYSTEM_ACTIONS === 'true'
+
+  if (!bridgeOnline) {
+    return {
+      reply:
+        `Launch request for ${resolvedTarget.label} confirmed, but bridge is offline. ` +
+        'Start the bridge and try again.',
+      activityEntry: createActivityEntry(`Launch blocked: ${resolvedTarget.label}`),
+    }
+  }
+
+  if (!clientAllowsSystemActions || !bridgeAllowsSystemActions) {
+    return {
+      reply:
+        `Launch confirmed for ${resolvedTarget.label}, but system actions are currently disabled by safety policy. ` +
+        'Enable VITE_ENABLE_SYSTEM_ACTIONS and SYSTEM_ACTIONS_ENABLED when you want real execution.',
+      activityEntry: createActivityEntry(`Launch preview only: ${resolvedTarget.label}`),
+    }
+  }
+
+  try {
+    const response = await fetch(resolveSystemLaunchUrl(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        confirmed: true,
+        targetId: resolvedTarget.id,
+        targetLabel: resolvedTarget.label,
+        targetRaw: target,
+        targetUrl: resolvedTarget.id === 'web' ? resolvedTarget.url : undefined,
+      }),
+    })
+
+    const payload = await response.json()
+
+    if (!response.ok || !payload?.ok) {
+      return {
+        reply:
+          payload?.reply ||
+          `Launch failed for ${resolvedTarget.label}. Bridge rejected the action for safety or runtime reasons.`,
+        activityEntry: createActivityEntry(`Launch failed: ${resolvedTarget.label}`),
+      }
+    }
+
+    return {
+      reply: payload.reply || `Launch command executed for ${resolvedTarget.label}.`,
+      activityEntry: createActivityEntry(`Launch executed: ${resolvedTarget.label}`),
+    }
+  } catch {
+    return {
+      reply:
+        `Launch request for ${resolvedTarget.label} could not reach the bridge endpoint. ` +
+        'Check bridge server status and retry.',
+      activityEntry: createActivityEntry(`Launch bridge error: ${resolvedTarget.label}`),
+    }
   }
 }
 

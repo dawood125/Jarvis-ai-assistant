@@ -35,12 +35,14 @@ function IntelPanel({
     { name: 'JARVIS UI', stack: 'NODE', color: 'border-fuchsia-400' },
   ]
 
+  const clientSystemActionsEnabled = import.meta.env.VITE_ENABLE_SYSTEM_ACTIONS === 'true'
+
   return (
     <motion.aside
       variants={containerVariants}
       initial="hidden"
       animate="show"
-      className="col-span-1 flex min-h-0 flex-col gap-4"
+      className="col-span-1 flex min-h-0 flex-col gap-4 lg:overflow-y-auto lg:pr-1"
     >
       <motion.section variants={itemVariants} className="glass-panel p-4">
         <h2 className="mb-3 border-b border-slate-800 pb-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">
@@ -96,6 +98,9 @@ function IntelPanel({
               </div>
               <div className="text-[10px] text-slate-500">
                 Groq key: {bridgeHealth.providers.groq ? 'yes' : 'no'} | OpenRouter key: {bridgeHealth.providers.openrouter ? 'yes' : 'no'}
+              </div>
+              <div className="text-[10px] text-slate-500">
+                System launch: {bridgeHealth.systemActionsEnabled ? 'bridge-enabled' : 'bridge-disabled'} | client flag: {clientSystemActionsEnabled ? 'on' : 'off'}
               </div>
             </div>
             <button
@@ -156,7 +161,7 @@ function IntelPanel({
         </div>
       </motion.section>
 
-      <motion.section variants={itemVariants} className="glass-panel min-h-0 flex-1 p-4">
+      <motion.section variants={itemVariants} className="glass-panel p-4 lg:min-h-0 lg:flex-1">
         <h2 className="mb-3 border-b border-slate-800 pb-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">
           Activity Feed
         </h2>

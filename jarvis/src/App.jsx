@@ -5,13 +5,22 @@ import IntelPanel from './components/IntelPanel'
 import LeftRail from './components/LeftRail'
 import TopBar from './components/TopBar'
 import { initialMessages, initialRecentActivity, quickSuggestions } from './data/mockData'
-import { executeFileSearchAction, executeLaunchAppAction } from './lib/commandActions'
+import {
+  executeConfirmedLaunchAppAction,
+  executeFileSearchAction,
+  executeLaunchAppAction,
+} from './lib/commandActions'
 import { COMMAND_TYPES, routeCommand } from './lib/commandRouter'
-import { fetchBridgeHealth } from './lib/modelClients'
+import { fetchBridgeHealth, fetchSystemTelemetry } from './lib/modelClients'
 import { readModelConfig, resolveModelReply, writeModelConfig } from './lib/modelRouter'
 
 const CHAT_STORAGE_KEY = 'jarvis.chat.history.v1'
 const NOTES_STORAGE_KEY = 'jarvis.notes.v1'
+const JOURNAL_STORAGE_KEY = 'jarvis.journal.v1'
+
+function getDateKey(date = new Date()) {
+  return date.toISOString().slice(0, 10)
+}
 
 function readStoredNotes() {
   try {
@@ -31,6 +40,116 @@ function writeStoredNotes(notes) {
   window.localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(notes))
 }
 
+function readStoredJournal() {
+  try {
+    const stored = window.localStorage.getItem(JOURNAL_STORAGE_KEY)
+    if (!stored) {
+      return []
+    }
+
+    const parsed = JSON.parse(stored)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function writeStoredJournal(entries) {
+  window.localStorage.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(entries))
+}
+
+function extractJournalTasks(text) {
+  const cleaned = text
+    .replace(/^today\s+i\s+/i, '')
+    .replace(/^i\s+/i, '')
+    .trim()
+
+  if (!cleaned) {
+    return []
+  }
+
+  const coarseParts = cleaned
+    .split(/\s*(?:\.\s+|;\s+|\s+also\s+|,\s+also\s+)\s*/i)
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  const taskParts = []
+  for (const part of coarseParts) {
+    const andSplit = part.split(/\s+and\s+/i).map((item) => item.trim())
+    if (andSplit.length === 1) {
+      taskParts.push(part)
+      continue
+    }
+
+    const hasVerb = andSplit.every((segment) =>
+      /(started|worked|completed|setup|set up|built|implemented|fixed|created|designed|tested|reviewed|deployed|documented)/i.test(segment),
+    )
+
+    if (hasVerb) {
+      taskParts.push(...andSplit)
+    } else {
+      taskParts.push(part)
+    }
+  }
+
+  const unique = []
+  const seen = new Set()
+
+  for (const rawTask of taskParts) {
+    const normalized = rawTask.replace(/[.]+$/, '').trim()
+    if (!normalized) {
+      continue
+    }
+
+    const key = normalized.toLowerCase()
+    if (seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    unique.push(normalized)
+  }
+
+  return unique
+}
+
+function createJournalEntry(text) {
+  const tasks = extractJournalTasks(text)
+  return {
+    dateKey: getDateKey(),
+    createdAt: new Date().toISOString(),
+    raw: text,
+    tasks: tasks.length > 0 ? tasks : [text.trim()],
+  }
+}
+
+function buildDailyRecapReply(entries) {
+  const todayKey = getDateKey()
+  const todayEntries = entries.filter((entry) => entry.dateKey === todayKey)
+
+  if (todayEntries.length === 0) {
+    return 'No journal entries found for today yet. You can say: journal today I worked on ...'
+  }
+
+  const allTasks = []
+  const seen = new Set()
+
+  todayEntries.forEach((entry) => {
+    entry.tasks.forEach((task) => {
+      const key = task.toLowerCase()
+      if (!seen.has(key)) {
+        seen.add(key)
+        allTasks.push(task)
+      }
+    })
+  })
+
+  const limitedTasks = allTasks.slice(0, 8)
+  const digest = limitedTasks.map((task, index) => `${index + 1}) ${task}`).join(' | ')
+
+  return `Today recap (${limitedTasks.length} tasks from ${todayEntries.length} entries): ${digest}`
+}
+
 function createActivityLabel(prefix, content) {
   const compact = content.trim()
   if (compact.length <= 40) {
@@ -40,16 +159,25 @@ function createActivityLabel(prefix, content) {
   return `${prefix}${compact.slice(0, 40)}...`
 }
 
-function createTelemetrySnapshot() {
-  const cpu = Math.floor(Math.random() * 40) + 20
-  const memory = Math.floor(Math.random() * 30) + 40
-  const ping = Math.floor(Math.random() * 20) + 5
-
+function createEmptyTelemetryState() {
   return {
-    cpu,
-    memory,
-    ping,
+    status: 'offline',
+    source: 'unavailable',
+    updatedAt: null,
+    metrics: {
+      cpuLoadPercent: null,
+      memoryUsagePercent: null,
+      networkPingMs: null,
+    },
   }
+}
+
+function formatPercentValue(value) {
+  return Number.isFinite(value) ? `${value}%` : 'n/a'
+}
+
+function formatPingValue(value) {
+  return Number.isFinite(value) ? `${value}ms` : 'n/a'
 }
 
 function App() {
@@ -72,22 +200,31 @@ function App() {
   const [modelConfig, setModelConfig] = useState(() => readModelConfig())
   const [bridgeHealth, setBridgeHealth] = useState({
     status: 'unknown',
+    systemActionsEnabled: false,
     providers: {
       groq: false,
       openrouter: false,
     },
   })
   const [notes, setNotes] = useState(() => readStoredNotes())
-  const [telemetry, setTelemetry] = useState(() => createTelemetrySnapshot())
+  const [telemetry, setTelemetry] = useState(() => createEmptyTelemetryState())
   const responseTimerRef = useRef(null)
 
   const statusMeters = [
-    { name: 'CPU Load', valueLabel: `${telemetry.cpu}%`, width: `${telemetry.cpu}%` },
-    { name: 'Memory Usage', valueLabel: `${telemetry.memory}%`, width: `${telemetry.memory}%` },
+    {
+      name: 'CPU Load',
+      valueLabel: formatPercentValue(telemetry.metrics.cpuLoadPercent),
+      width: `${Number.isFinite(telemetry.metrics.cpuLoadPercent) ? telemetry.metrics.cpuLoadPercent : 0}%`,
+    },
+    {
+      name: 'Memory Usage',
+      valueLabel: formatPercentValue(telemetry.metrics.memoryUsagePercent),
+      width: `${Number.isFinite(telemetry.metrics.memoryUsagePercent) ? telemetry.metrics.memoryUsagePercent : 0}%`,
+    },
     {
       name: 'Network Ping',
-      valueLabel: `${telemetry.ping}ms`,
-      width: `${Math.min(100, telemetry.ping * 2)}%`,
+      valueLabel: formatPingValue(telemetry.metrics.networkPingMs),
+      width: `${Number.isFinite(telemetry.metrics.networkPingMs) ? Math.min(100, telemetry.metrics.networkPingMs * 2) : 0}%`,
     },
   ]
 
@@ -104,23 +241,16 @@ function App() {
     [],
   )
 
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      setTelemetry(createTelemetrySnapshot())
-    }, 3000)
-
-    return () => window.clearInterval(interval)
-  }, [])
-
-  const refreshBridgeHealth = () => {
-    fetchBridgeHealth().then((health) => {
+  const refreshRuntimeStatus = () => {
+    Promise.all([fetchBridgeHealth(), fetchSystemTelemetry()]).then(([health, telemetrySnapshot]) => {
       setBridgeHealth(health)
+      setTelemetry(telemetrySnapshot)
     })
   }
 
   useEffect(() => {
-    refreshBridgeHealth()
-    const interval = window.setInterval(refreshBridgeHealth, 15000)
+    refreshRuntimeStatus()
+    const interval = window.setInterval(refreshRuntimeStatus, 8000)
     return () => window.clearInterval(interval)
   }, [])
 
@@ -181,9 +311,19 @@ function App() {
       let replyText = 'Pending action confirmed.'
 
       if (pendingAction.type === COMMAND_TYPES.LAUNCH_APP) {
-        const launchResult = executeLaunchAppAction(pendingAction, { confirmed: true })
-        replyText = launchResult.reply
-        setRecentActivity((prev) => [launchResult.activityEntry, ...prev].slice(0, 6))
+        executeConfirmedLaunchAppAction(pendingAction, {
+          bridgeHealth,
+        })
+          .then((launchResult) => {
+            setRecentActivity((prev) => [launchResult.activityEntry, ...prev].slice(0, 6))
+            queueJarvisReply(launchResult.reply)
+          })
+          .catch(() => {
+            queueJarvisReply('Launch confirmation failed due to an unexpected adapter error.')
+          })
+
+        setPendingAction(null)
+        return
       }
 
       setPendingAction(null)
@@ -221,6 +361,39 @@ function App() {
         {
           ago: 'just now',
           label: createActivityLabel('Note saved: ', routeResult.action.payload.text),
+        },
+        ...prev,
+      ].slice(0, 6))
+    }
+
+    if (routeResult.action?.type === COMMAND_TYPES.SAVE_JOURNAL) {
+      const journalText = routeResult.action.payload.text
+      const existingEntries = readStoredJournal()
+      const nextEntry = createJournalEntry(journalText)
+      const updatedEntries = [nextEntry, ...existingEntries].slice(0, 120)
+
+      writeStoredJournal(updatedEntries)
+
+      const primaryTask = nextEntry.tasks[0] || journalText
+      replyText = `Daily journal updated. Captured ${nextEntry.tasks.length} task(s) for today.`
+
+      setRecentActivity((prev) => [
+        {
+          ago: 'just now',
+          label: createActivityLabel('Journal update: ', primaryTask),
+        },
+        ...prev,
+      ].slice(0, 6))
+    }
+
+    if (routeResult.action?.type === COMMAND_TYPES.DAILY_RECAP) {
+      const entries = readStoredJournal()
+      replyText = buildDailyRecapReply(entries)
+
+      setRecentActivity((prev) => [
+        {
+          ago: 'just now',
+          label: 'Daily recap generated',
         },
         ...prev,
       ].slice(0, 6))
@@ -285,16 +458,16 @@ function App() {
   }
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-[#050a14] text-white">
+    <div className="relative min-h-screen w-full overflow-y-auto bg-[#050a14] text-white lg:h-screen lg:overflow-hidden">
       <HudBackground />
 
-      <main className="relative z-10 h-full p-4 md:p-5">
-        <div className="flex h-full flex-col gap-4">
-          <TopBar now={now} dateText={dateText} bridgeHealth={bridgeHealth} />
+      <main className="relative z-10 min-h-screen p-4 md:p-5 lg:h-full">
+        <div className="flex min-h-full flex-col gap-4 lg:h-full">
+          <TopBar now={now} dateText={dateText} bridgeHealth={bridgeHealth} telemetryStatus={telemetry.status} />
 
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-4">
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-4 lg:overflow-hidden">
             <LeftRail statusMeters={statusMeters} notes={notes} />
-            <div className="lg:col-span-2 min-h-0">
+            <div className="min-h-115 lg:col-span-2 lg:min-h-0">
               <ChatStage
                 messages={messages}
                 onSubmitCommand={handleCommand}
@@ -307,7 +480,7 @@ function App() {
               onSuggestionSelect={handleCommand}
               modelConfig={modelConfig}
               bridgeHealth={bridgeHealth}
-              onRefreshBridgeHealth={refreshBridgeHealth}
+              onRefreshBridgeHealth={refreshRuntimeStatus}
               onModelConfigChange={handleModelConfigChange}
             />
           </div>

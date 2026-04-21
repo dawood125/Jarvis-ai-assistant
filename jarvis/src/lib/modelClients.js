@@ -3,6 +3,7 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MODEL_CALL_TIMEOUT_MS = 12000
 const DEFAULT_BRIDGE_PATH = '/api/model/reply'
 const DEFAULT_BRIDGE_HEALTH_PATH = '/health'
+const DEFAULT_SYSTEM_STATUS_PATH = '/api/system/status'
 
 function resolveBridgeUrl() {
   const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
@@ -22,12 +23,22 @@ function resolveBridgeHealthUrl() {
   return `${baseUrl.replace(/\/$/, '')}${DEFAULT_BRIDGE_HEALTH_PATH}`
 }
 
+function resolveSystemStatusUrl() {
+  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  if (!baseUrl) {
+    return DEFAULT_SYSTEM_STATUS_PATH
+  }
+
+  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_SYSTEM_STATUS_PATH}`
+}
+
 export async function fetchBridgeHealth() {
   try {
     const response = await fetch(resolveBridgeHealthUrl())
     if (!response.ok) {
       return {
         status: 'offline',
+        systemActionsEnabled: false,
         providers: {
           groq: false,
           openrouter: false,
@@ -38,6 +49,7 @@ export async function fetchBridgeHealth() {
     const payload = await response.json()
     return {
       status: 'online',
+      systemActionsEnabled: Boolean(payload?.systemActionsEnabled),
       providers: {
         groq: Boolean(payload?.providers?.groq),
         openrouter: Boolean(payload?.providers?.openrouter),
@@ -46,9 +58,58 @@ export async function fetchBridgeHealth() {
   } catch {
     return {
       status: 'offline',
+      systemActionsEnabled: false,
       providers: {
         groq: false,
         openrouter: false,
+      },
+    }
+  }
+}
+
+export async function fetchSystemTelemetry() {
+  try {
+    const response = await fetch(resolveSystemStatusUrl())
+    if (!response.ok) {
+      return {
+        status: 'offline',
+        source: 'unavailable',
+        updatedAt: null,
+        metrics: {
+          cpuLoadPercent: null,
+          memoryUsagePercent: null,
+          networkPingMs: null,
+        },
+      }
+    }
+
+    const payload = await response.json()
+
+    return {
+      status: payload?.status || 'online',
+      source: payload?.source || 'bridge-os',
+      updatedAt: payload?.updatedAt || null,
+      metrics: {
+        cpuLoadPercent: Number.isFinite(payload?.metrics?.cpuLoadPercent)
+          ? payload.metrics.cpuLoadPercent
+          : null,
+        memoryUsagePercent: Number.isFinite(payload?.metrics?.memoryUsagePercent)
+          ? payload.metrics.memoryUsagePercent
+          : null,
+        networkPingMs: Number.isFinite(payload?.metrics?.networkPingMs)
+          ? payload.metrics.networkPingMs
+          : null,
+      },
+    }
+  } catch {
+    return {
+      status: 'offline',
+      source: 'unavailable',
+      updatedAt: null,
+      metrics: {
+        cpuLoadPercent: null,
+        memoryUsagePercent: null,
+        networkPingMs: null,
       },
     }
   }

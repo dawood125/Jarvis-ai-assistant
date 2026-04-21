@@ -2,6 +2,8 @@ export const quickSuggestions = [
   'System status report',
   'launch vscode',
   'search for diagnostics',
+  'journal today I worked on Jarvis routing and bridge fixes',
+  'daily recap',
   'note Remember to push today updates to GitHub',
   'list notes',
   'help',

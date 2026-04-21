@@ -33,3 +33,27 @@ By default, cloud calls are routed through the secure bridge so provider keys ar
 ## Security Note
 
 Do not commit real API keys. Keep them only in local .env files.
+
+## Optional Real App Launch Mode
+
+By default, launch commands stay in preview mode.
+
+To enable real launch execution with strict confirmation:
+
+- Set VITE_ENABLE_SYSTEM_ACTIONS=true in frontend environment
+- Set SYSTEM_ACTIONS_ENABLED=true in bridge environment
+- Keep using confirm/cancel flow in chat before execution
+
+If either flag is false, launch requests remain safely non-executing.
+
+When enabled, launch confirmations support allowlisted apps and website targets (http/https).
+
+## Real System Vitals
+
+The bridge now exposes real system telemetry at /api/system/status:
+
+- CPU Load (sampled from OS CPU times)
+- Memory Usage (OS used-memory percentage)
+- Network Ping (single ping probe to SYSTEM_PING_HOST)
+
+Tune telemetry cadence with SYSTEM_TELEMETRY_REFRESH_MS in your bridge environment.

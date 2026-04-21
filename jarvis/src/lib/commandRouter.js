@@ -2,6 +2,8 @@ export const COMMAND_TYPES = Object.freeze({
   STATUS: 'status',
   LAUNCH_APP: 'launch-app',
   SAVE_NOTE: 'save-note',
+  SAVE_JOURNAL: 'save-journal',
+  DAILY_RECAP: 'daily-recap',
   LIST_NOTES: 'list-notes',
   FILE_SEARCH: 'file-search',
   HELP: 'help',
@@ -31,6 +33,138 @@ const APP_CATALOG = [
   },
 ]
 
+const WEB_TARGET_CATALOG = [
+  { label: 'YouTube', aliases: ['youtube', 'yt'], url: 'https://youtube.com' },
+  { label: 'GitHub', aliases: ['github'], url: 'https://github.com' },
+  { label: 'Gmail', aliases: ['gmail'], url: 'https://mail.google.com' },
+  { label: 'Google', aliases: ['google'], url: 'https://google.com' },
+  { label: 'ChatGPT', aliases: ['chatgpt'], url: 'https://chatgpt.com' },
+]
+
+function cleanExtractedText(text) {
+  return text.replace(/^[\s:.,-]+/, '').trim()
+}
+
+function isNaturalStatusQuery(normalized) {
+  if (normalized.includes('status') || normalized.includes('health') || normalized.includes('telemetry')) {
+    return true
+  }
+
+  if (normalized.includes('what is happening in my system') || normalized.includes("what's happening in my system")) {
+    return true
+  }
+
+  return (
+    normalized.includes('system') &&
+    (normalized.includes('report') ||
+      normalized.includes('diagnostic') ||
+      normalized.includes('happening') ||
+      normalized.includes('going on'))
+  )
+}
+
+function extractLaunchTarget(cleanCommand, normalized) {
+  if (
+    normalized.startsWith('open ') ||
+    normalized.startsWith('launch ') ||
+    normalized.startsWith('start ') ||
+    normalized.startsWith('run ')
+  ) {
+    return cleanCommand.split(' ').slice(1).join(' ').trim()
+  }
+
+  const naturalMatch = cleanCommand.match(/\b(?:open|launch|start|run)\b\s+(.+)$/i)
+  if (!naturalMatch?.[1]) {
+    return null
+  }
+
+  return cleanExtractedText(naturalMatch[1])
+}
+
+function extractNaturalNoteText(cleanCommand) {
+  const patterns = [
+    /(?:please\s+)?(?:add|save|create|take)\s+(?:today\s+)?(?:tasks?\s+)?notes?\s*[:.-]?\s*(.+)$/i,
+    /(?:please\s+)?(?:add|save|create|take)\s+(?:a\s+)?note\s*[:.-]?\s*(.+)$/i,
+    /\bremember\s+(?:that\s+)?(.+)$/i,
+    /\bnote\s*[:.-]\s*(.+)$/i,
+  ]
+
+  for (const pattern of patterns) {
+    const match = cleanCommand.match(pattern)
+    if (match?.[1]) {
+      const extracted = cleanExtractedText(match[1])
+      if (extracted) {
+        return extracted
+      }
+    }
+  }
+
+  return null
+}
+
+function isNaturalListNotes(normalized) {
+  if (
+    normalized === 'list notes' ||
+    normalized === 'list note' ||
+    normalized === 'show notes' ||
+    normalized === 'show note' ||
+    normalized === 'view notes' ||
+    normalized === 'view note'
+  ) {
+    return true
+  }
+
+  return (
+    normalized.includes('notes') &&
+    (normalized.includes('list') || normalized.includes('show') || normalized.includes('view') || normalized.includes('my notes'))
+  )
+}
+
+function isDailyRecapRequest(normalized) {
+  if (
+    normalized === 'daily recap' ||
+    normalized === 'today recap' ||
+    normalized === 'recap today' ||
+    normalized === 'show recap' ||
+    normalized === 'today summary'
+  ) {
+    return true
+  }
+
+  return (
+    normalized.includes('recap') ||
+    normalized.includes('summary of today') ||
+    normalized.includes('what did i do today') ||
+    normalized.includes('show my today tasks')
+  )
+}
+
+function extractJournalText(cleanCommand, normalized) {
+  const cleanedCommand = cleanCommand.replace(/^hey\s+jarvis[\s,:-]*/i, '').trim()
+
+  const patterns = [
+    /^(?:journal|log)(?:\s+today)?\s*[:.-]?\s*(.+)$/i,
+    /(?:please\s+)?add\s+today\s+(?:task\s+)?notes?\s*[:.-]?\s*(.+)$/i,
+  ]
+
+  for (const pattern of patterns) {
+    const match = cleanedCommand.match(pattern)
+    if (match?.[1]) {
+      const extracted = cleanExtractedText(match[1])
+      if (extracted) {
+        return extracted
+      }
+    }
+  }
+
+  const journalSignals = /(today\s+i\s+|i\s+worked\s+on|i\s+started|i\s+completed|i\s+built|i\s+implemented|i\s+fixed)/i
+  if (journalSignals.test(normalized) && normalized.includes('today')) {
+    return cleanedCommand
+  }
+
+  return null
+}
+
 function formatStatus(statusMeters) {
   if (!statusMeters || statusMeters.length === 0) {
     return 'All core telemetry channels are online and stable.'
@@ -40,9 +174,68 @@ function formatStatus(statusMeters) {
   return `System snapshot -> ${lines.join(' | ')}`
 }
 
+function normalizeWebUrl(targetText) {
+  const compact = targetText.trim()
+  if (!compact || /\s/.test(compact)) {
+    return null
+  }
+
+  const candidate = /^https?:\/\//i.test(compact) ? compact : `https://${compact}`
+
+  try {
+    const parsed = new URL(candidate)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null
+    }
+
+    return parsed.toString()
+  } catch {
+    return null
+  }
+}
+
+function resolveWebTarget(targetText) {
+  const normalizedTarget = targetText.toLowerCase().trim()
+
+  for (const item of WEB_TARGET_CATALOG) {
+    if (item.aliases.some((alias) => normalizedTarget === alias || normalizedTarget.startsWith(`${alias} `))) {
+      return {
+        id: 'web',
+        label: item.label,
+        url: item.url,
+      }
+    }
+  }
+
+  const resolvedUrl = normalizeWebUrl(targetText)
+  if (!resolvedUrl) {
+    return null
+  }
+
+  try {
+    const parsed = new URL(resolvedUrl)
+    return {
+      id: 'web',
+      label: `Website (${parsed.hostname})`,
+      url: resolvedUrl,
+    }
+  } catch {
+    return {
+      id: 'web',
+      label: 'Website',
+      url: resolvedUrl,
+    }
+  }
+}
+
 function resolveAppTarget(targetText) {
   const normalizedTarget = targetText.toLowerCase()
-  return APP_CATALOG.find((app) => app.aliases.some((alias) => normalizedTarget.includes(alias))) || null
+  const appMatch = APP_CATALOG.find((app) => app.aliases.some((alias) => normalizedTarget.includes(alias)))
+  if (appMatch) {
+    return appMatch
+  }
+
+  return resolveWebTarget(targetText)
 }
 
 export function routeCommand(command, statusMeters) {
@@ -57,7 +250,7 @@ export function routeCommand(command, statusMeters) {
     }
   }
 
-  if (normalized.includes('status') || normalized.includes('health') || normalized.includes('telemetry')) {
+  if (isNaturalStatusQuery(normalized)) {
     return {
       reply: formatStatus(statusMeters),
       action: null,
@@ -65,13 +258,33 @@ export function routeCommand(command, statusMeters) {
     }
   }
 
-  if (
-    normalized.startsWith('open ') ||
-    normalized.startsWith('launch ') ||
-    normalized.startsWith('start ') ||
-    normalized.startsWith('run ')
-  ) {
-    const target = cleanCommand.split(' ').slice(1).join(' ').trim()
+  if (isDailyRecapRequest(normalized)) {
+    return {
+      reply: 'Building your daily recap from journal memory...',
+      action: {
+        type: COMMAND_TYPES.DAILY_RECAP,
+      },
+      intent: COMMAND_TYPES.DAILY_RECAP,
+    }
+  }
+
+  const journalText = extractJournalText(cleanCommand, normalized)
+  if (journalText) {
+    return {
+      reply: 'Capturing your daily progress into journal memory...',
+      action: {
+        type: COMMAND_TYPES.SAVE_JOURNAL,
+        payload: {
+          text: journalText,
+        },
+      },
+      intent: COMMAND_TYPES.SAVE_JOURNAL,
+    }
+  }
+
+  const launchTarget = extractLaunchTarget(cleanCommand, normalized)
+  if (launchTarget) {
+    const target = launchTarget
     const resolvedTarget = resolveAppTarget(target)
 
     return {
@@ -112,14 +325,19 @@ export function routeCommand(command, statusMeters) {
     }
   }
 
-  if (
-    normalized === 'list notes' ||
-    normalized === 'list note' ||
-    normalized === 'show notes' ||
-    normalized === 'show note' ||
-    normalized === 'view notes' ||
-    normalized === 'view note'
-  ) {
+  const naturalNoteText = extractNaturalNoteText(cleanCommand)
+  if (naturalNoteText) {
+    return {
+      reply: 'Captured your note request. Saving to local memory...',
+      action: {
+        type: COMMAND_TYPES.SAVE_NOTE,
+        payload: { text: naturalNoteText },
+      },
+      intent: COMMAND_TYPES.SAVE_NOTE,
+    }
+  }
+
+  if (isNaturalListNotes(normalized)) {
     return {
       reply: 'Loading notes from local memory...',
       action: {
@@ -129,9 +347,11 @@ export function routeCommand(command, statusMeters) {
     }
   }
 
-  if (normalized.includes('search')) {
+  if (normalized.includes('search') || normalized.startsWith('find ') || normalized.startsWith('lookup ')) {
     const query = cleanCommand
       .replace(/^search\s*/i, '')
+      .replace(/^find\s*/i, '')
+      .replace(/^lookup\s*/i, '')
       .replace(/^files?\s*/i, '')
       .replace(/^for\s*/i, '')
       .trim()
@@ -152,7 +372,7 @@ export function routeCommand(command, statusMeters) {
   if (normalized === 'help' || normalized.includes('what can you do')) {
     return {
       reply:
-        'Available now: status checks, app-launch intent preview, local file-context search, local notes save/list, and command history persistence.',
+        'Available now: status checks, launch intents with confirmation, local search, notes save/list, daily journal capture, and daily recap summaries.',
       action: null,
       intent: COMMAND_TYPES.HELP,
     }

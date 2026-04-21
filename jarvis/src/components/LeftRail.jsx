@@ -8,7 +8,7 @@ function LeftRail({ statusMeters, notes }) {
       initial={{ x: -26, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ duration: 0.45, ease: 'easeOut' }}
-      className="col-span-1 flex min-h-0 flex-col gap-4"
+      className="col-span-1 flex min-h-0 flex-col gap-4 lg:overflow-y-auto lg:pr-1"
     >
       <section className="glass-panel flex items-center justify-center p-5">
         <div className="arc-container">
@@ -44,7 +44,7 @@ function LeftRail({ statusMeters, notes }) {
         </div>
       </section>
 
-      <section className="glass-panel min-h-0 flex-1 p-4">
+      <section className="glass-panel p-4 lg:min-h-0 lg:flex-1">
         <h3 className="mb-3 border-b border-slate-800 pb-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">Recent Notes</h3>
         <div className="max-h-full space-y-2 overflow-y-auto pr-1 chat-scroll">
           {safeNotes.length === 0 && (

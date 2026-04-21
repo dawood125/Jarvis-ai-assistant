@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion'
 
-function TopBar({ now, dateText, bridgeHealth }) {
+function TopBar({ now, dateText, bridgeHealth, telemetryStatus }) {
   const bridgeOnline = bridgeHealth?.status === 'online'
+  const telemetryOnline = telemetryStatus === 'online'
 
   return (
     <motion.header
@@ -18,10 +19,14 @@ function TopBar({ now, dateText, bridgeHealth }) {
       </div>
 
       <div className="text-right">
-        <div className="mb-1 flex items-center justify-end gap-2">
+        <div className="mb-1 flex flex-wrap items-center justify-end gap-2">
           <span className={`h-2 w-2 rounded-full ${bridgeOnline ? 'bg-emerald-400' : 'bg-rose-400'}`} />
           <span className={`text-[10px] tracking-[0.16em] ${bridgeOnline ? 'text-emerald-400' : 'text-rose-400'}`}>
             BRIDGE {bridgeOnline ? 'ONLINE' : 'OFFLINE'}
+          </span>
+          <span className={`h-2 w-2 rounded-full ${telemetryOnline ? 'bg-cyan-400' : 'bg-amber-400'}`} />
+          <span className={`text-[10px] tracking-[0.16em] ${telemetryOnline ? 'text-cyan-300' : 'text-amber-300'}`}>
+            SYSTEM {telemetryOnline ? 'LIVE' : 'STALE'}
           </span>
         </div>
         <div className="glow-text text-lg font-medium tracking-[0.16em] md:text-xl">{now}</div>
