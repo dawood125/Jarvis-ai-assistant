@@ -6,9 +6,13 @@ import LeftRail from './components/LeftRail'
 import TopBar from './components/TopBar'
 import { initialMessages, initialRecentActivity, quickSuggestions } from './data/mockData'
 import {
+  executeConfirmedCloseAppAction,
+  executeConfirmedCloseProjectAction,
   executeConfirmedLaunchAppAction,
+  executeConfirmedOpenProjectAction,
   executeFileSearchAction,
   executeLaunchAppAction,
+  executeWebSummaryAction,
 } from './lib/commandActions'
 import { COMMAND_TYPES, routeCommand } from './lib/commandRouter'
 import { fetchBridgeHealth, fetchSystemTelemetry } from './lib/modelClients'
@@ -180,6 +184,44 @@ function formatPingValue(value) {
   return Number.isFinite(value) ? `${value}ms` : 'n/a'
 }
 
+function buildRuntimeDiagnosticReply({ bridgeHealth, telemetry }) {
+  const bridgeOnline = bridgeHealth?.status === 'online'
+  const systemActionsEnabled = Boolean(bridgeHealth?.systemActionsEnabled)
+  const telemetryOnline = telemetry?.status === 'online'
+  const providersReady = Boolean(bridgeHealth?.providers?.groq || bridgeHealth?.providers?.openrouter)
+
+  const checks = [
+    `Bridge: ${bridgeOnline ? 'online' : 'offline'}`,
+    `System actions: ${systemActionsEnabled ? 'enabled' : 'disabled'}`,
+    `Telemetry: ${telemetryOnline ? 'live' : 'offline'}`,
+    `Provider keys: ${providersReady ? 'detected' : 'missing'}`,
+  ]
+
+  const recovery = []
+
+  if (!bridgeOnline) {
+    recovery.push('start bridge with npm run bridge')
+  }
+
+  if (!systemActionsEnabled) {
+    recovery.push('enable VITE_ENABLE_SYSTEM_ACTIONS and SYSTEM_ACTIONS_ENABLED')
+  }
+
+  if (!telemetryOnline) {
+    recovery.push('verify /api/system/status via bridge and then press REFRESH')
+  }
+
+  if (!providersReady) {
+    recovery.push('add GROQ_API_KEY or OPENROUTER_API_KEY in bridge env')
+  }
+
+  if (recovery.length === 0) {
+    return `Runtime diagnostics -> ${checks.join(' | ')}. No blocking issue detected. Retry launch command and confirm.`
+  }
+
+  return `Runtime diagnostics -> ${checks.join(' | ')}. Recovery: ${recovery.join(' ; ')}.`
+}
+
 function App() {
   const [messages, setMessages] = useState(() => {
     try {
@@ -326,6 +368,54 @@ function App() {
         return
       }
 
+      if (pendingAction.type === COMMAND_TYPES.CLOSE_APP) {
+        executeConfirmedCloseAppAction(pendingAction, {
+          bridgeHealth,
+        })
+          .then((closeResult) => {
+            setRecentActivity((prev) => [closeResult.activityEntry, ...prev].slice(0, 6))
+            queueJarvisReply(closeResult.reply)
+          })
+          .catch(() => {
+            queueJarvisReply('Close confirmation failed due to an unexpected adapter error.')
+          })
+
+        setPendingAction(null)
+        return
+      }
+
+      if (pendingAction.type === COMMAND_TYPES.OPEN_PROJECT) {
+        executeConfirmedOpenProjectAction(pendingAction, {
+          bridgeHealth,
+        })
+          .then((projectResult) => {
+            setRecentActivity((prev) => [projectResult.activityEntry, ...prev].slice(0, 6))
+            queueJarvisReply(projectResult.reply)
+          })
+          .catch(() => {
+            queueJarvisReply('Project launch confirmation failed due to an unexpected adapter error.')
+          })
+
+        setPendingAction(null)
+        return
+      }
+
+      if (pendingAction.type === COMMAND_TYPES.CLOSE_PROJECT) {
+        executeConfirmedCloseProjectAction(pendingAction, {
+          bridgeHealth,
+        })
+          .then((projectResult) => {
+            setRecentActivity((prev) => [projectResult.activityEntry, ...prev].slice(0, 6))
+            queueJarvisReply(projectResult.reply)
+          })
+          .catch(() => {
+            queueJarvisReply('Project close confirmation failed due to an unexpected adapter error.')
+          })
+
+        setPendingAction(null)
+        return
+      }
+
       setPendingAction(null)
 
       queueJarvisReply(replyText)
@@ -424,14 +514,78 @@ function App() {
       }
     }
 
+    if (routeResult.action?.type === COMMAND_TYPES.CLOSE_APP) {
+      if (routeResult.action.requiresConfirmation) {
+        setPendingAction(routeResult.action)
+        const target = routeResult.action.payload?.resolvedTarget?.label || routeResult.action.payload?.target || 'target app'
+        replyText = `Close action staged for ${target}. Reply with confirm to proceed or cancel to abort.`
+      }
+    }
+
+    if (routeResult.action?.type === COMMAND_TYPES.OPEN_PROJECT) {
+      if (routeResult.action.requiresConfirmation) {
+        setPendingAction(routeResult.action)
+        const project =
+          routeResult.action.payload?.resolvedProject?.label || routeResult.action.payload?.projectName || 'project'
+        replyText = `Project launch staged for ${project}. Reply with confirm to proceed or cancel to abort.`
+      }
+    }
+
+    if (routeResult.action?.type === COMMAND_TYPES.CLOSE_PROJECT) {
+      if (routeResult.action.requiresConfirmation) {
+        setPendingAction(routeResult.action)
+        const project =
+          routeResult.action.payload?.resolvedProject?.label || routeResult.action.payload?.projectName || 'project'
+        replyText = `Project close staged for ${project}. Reply with confirm to proceed or cancel to abort.`
+      }
+    }
+
     if (routeResult.action?.type === COMMAND_TYPES.FILE_SEARCH) {
-      const searchResult = executeFileSearchAction(routeResult.action, {
+      executeFileSearchAction(routeResult.action, {
         messages,
         recentActivity,
         notes,
+        bridgeHealth,
       })
-      replyText = searchResult.reply
-      setRecentActivity((prev) => [searchResult.activityEntry, ...prev].slice(0, 6))
+        .then((searchResult) => {
+          setRecentActivity((prev) => [searchResult.activityEntry, ...prev].slice(0, 6))
+          queueJarvisReply(searchResult.reply)
+        })
+        .catch(() => {
+          queueJarvisReply('File search failed due to an unexpected adapter error.')
+        })
+
+      return
+    }
+
+    if (routeResult.action?.type === COMMAND_TYPES.WEB_SUMMARIZE) {
+      executeWebSummaryAction(routeResult.action, {
+        bridgeHealth,
+      })
+        .then((summaryResult) => {
+          setRecentActivity((prev) => [summaryResult.activityEntry, ...prev].slice(0, 6))
+          queueJarvisReply(summaryResult.reply)
+        })
+        .catch(() => {
+          queueJarvisReply('Web summary failed due to an unexpected adapter error.')
+        })
+
+      return
+    }
+
+    if (routeResult.action?.type === COMMAND_TYPES.RUNTIME_DIAGNOSTIC) {
+      replyText = buildRuntimeDiagnosticReply({
+        bridgeHealth,
+        telemetry,
+      })
+
+      setRecentActivity((prev) => [
+        {
+          ago: 'just now',
+          label: 'Runtime diagnostics generated',
+        },
+        ...prev,
+      ].slice(0, 6))
     }
 
     if (routeResult.intent === COMMAND_TYPES.UNKNOWN) {
@@ -448,7 +602,9 @@ function App() {
           queueJarvisReply(modelReply.reply)
         })
         .catch(() => {
-          queueJarvisReply('Model route failed unexpectedly. Staying in local-safe response mode.')
+          queueJarvisReply(
+            'Model route failed unexpectedly. Recovery: verify bridge online state, provider keys, and cloud toggle, then retry your prompt.',
+          )
         })
 
       return

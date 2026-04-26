@@ -19,6 +19,34 @@ function sanitizeProvider(value) {
   return allowed.includes(value) ? value : MODEL_PROVIDERS.LOCAL_FALLBACK
 }
 
+function createCloudRecoveryHint(reason) {
+  if (!reason) {
+    return 'Check bridge and provider settings, then retry.'
+  }
+
+  if (reason === 'bridge_unreachable') {
+    return 'Start bridge with npm run bridge, then retry your prompt.'
+  }
+
+  if (reason === 'missing_api_key') {
+    return 'Add provider API keys to bridge env (GROQ_API_KEY / OPENROUTER_API_KEY), restart bridge, and retry.'
+  }
+
+  if (reason === 'client_calls_disabled') {
+    return 'Enable cloud routing from Model Routing panel, then retry.'
+  }
+
+  if (reason === 'timeout' || reason === 'network_error') {
+    return 'Check internet connectivity and provider status, then retry.'
+  }
+
+  if (reason.startsWith('provider_http_')) {
+    return 'Provider returned an error. Verify model ID and key quota, then retry.'
+  }
+
+  return 'Run runtime diagnostics, verify bridge health and keys, then retry.'
+}
+
 export function readModelConfig() {
   try {
     const stored = window.localStorage.getItem(MODEL_CONFIG_STORAGE_KEY)
@@ -112,7 +140,7 @@ export async function resolveModelReply(command, config = readModelConfig()) {
       provider: MODEL_PROVIDERS.LOCAL_FALLBACK,
       reply:
         `Cloud route failed (${primaryResult.reason}), switched to local-safe response mode. ` +
-        `Captured request: "${command}".`,
+        `Captured request: "${command}". Recovery: ${createCloudRecoveryHint(primaryResult.reason)}`,
     }
   }
 
@@ -132,6 +160,7 @@ export async function resolveModelReply(command, config = readModelConfig()) {
     provider: MODEL_PROVIDERS.LOCAL_FALLBACK,
     reply:
       `Primary (${primaryProvider}) and fallback (${fallbackProvider}) routes failed. ` +
-      'Local-safe mode is responding until provider credentials/connectivity are available.',
+      `Local-safe mode is responding. Recovery: ${createCloudRecoveryHint(primaryResult.reason)} ` +
+      `Fallback detail: ${createCloudRecoveryHint(fallbackResult.reason)}`,
   }
 }

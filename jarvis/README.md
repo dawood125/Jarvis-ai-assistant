@@ -48,6 +48,38 @@ If either flag is false, launch requests remain safely non-executing.
 
 When enabled, launch confirmations support allowlisted apps and website targets (http/https).
 
+Close-app confirmations are also supported for allowlisted targets (VS Code, terminal, Chrome, Spotify).
+
+Project launcher confirmations are supported for mapped project IDs via bridge env variables:
+
+- SYSTEM_PROJECT_JARVIS
+- SYSTEM_PROJECT_FREELANCEHUB
+- SYSTEM_PROJECT_PORTFOLIO
+- SYSTEM_PROJECT_HOSPITAL
+
+Project close confirmations are also supported and close the mapped editor target (default: VS Code).
+
+## Real Filesystem Search
+
+The bridge exposes /api/system/file-search for real file lookups by filename keyword.
+
+Configure search behavior via:
+
+- SYSTEM_FILE_SEARCH_ROOTS (comma-separated absolute paths)
+- SYSTEM_FILE_SEARCH_MAX_RESULTS
+- SYSTEM_FILE_SEARCH_TIMEOUT_MS
+
+## Web Browse and Summarize
+
+The bridge exposes /api/web/summarize for URL and query summarization.
+
+Examples:
+
+- summarize https://example.com
+- summarize tech news
+
+Tune request timeout with SYSTEM_WEB_SUMMARY_FETCH_TIMEOUT_MS.
+
 ## Real System Vitals
 
 The bridge now exposes real system telemetry at /api/system/status:

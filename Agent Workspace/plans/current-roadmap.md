@@ -49,7 +49,10 @@
 - Milestone 8 [done]: Added optional real app-launch execution adapter with explicit safety controls.
 - Milestone 9 [done]: Added richer task-journal extraction and daily recap command flow.
 - Milestone 10 [done]: Improved launch diagnostics, added website launch support, and bridged real system vitals polling.
-- Milestone 11 [next]: Add richer command failure guidance and actionable recovery prompts in chat responses.
+- Milestone 11 [done]: Added richer command failure guidance and actionable recovery prompts in chat responses.
+- Milestone 12 [done]: Added close-app and project-launch command execution flows with safe confirmations.
+- Milestone 13 [done]: Implemented real filesystem search, web summarize flow, and close-project coverage for remaining Phase 1 gaps.
+- Milestone 14 [next]: Phase 1 stabilization pass (command QA matrix, edge-case handling, and packaging readiness check).
 
 ## Session Rule
 - Daily time budget: about 1 hour

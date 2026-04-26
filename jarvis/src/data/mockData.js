@@ -1,6 +1,11 @@
 export const quickSuggestions = [
   'System status report',
+  'diagnose launch',
   'launch vscode',
+  'close chrome',
+  'open my jarvis project',
+  'close my jarvis project',
+  'summarize tech news',
   'search for diagnostics',
   'journal today I worked on Jarvis routing and bridge fixes',
   'daily recap',

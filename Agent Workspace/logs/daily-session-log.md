@@ -89,3 +89,33 @@
 - Completed milestone: improved responsive dashboard behavior to prevent right/left cards from clipping on constrained layouts.
 - Verified runtime health/status payloads and launch endpoint responses on local bridge test port.
 - Next objective: improve chat-level failure guidance and self-healing prompts when launch/system operations fail.
+
+## 2026-04-21
+- Started next roadmap milestone focused on failure guidance and recovery prompts.
+- Completed milestone: added runtime diagnostics intent (for example: "diagnose launch" and "why app not opening").
+- Completed milestone: upgraded launch failures with reason-specific recovery instructions (bridge offline, safety flags, invalid URL, allowlist, spawn/exit failures).
+- Completed milestone: upgraded cloud-route fallback replies with actionable recovery hints based on failure reason.
+- Updated quick suggestions to include runtime diagnostics trigger.
+- Verified build success and zero diagnostics errors after milestone changes.
+- Verified runtime-diagnostic intent mapping and help response behavior via command router checks.
+- Next objective: add command-level self-healing retries for recoverable bridge and launch failures.
+
+## 2026-04-26
+- Continued Phase 1 completion push with high-impact command coverage upgrades.
+- Completed milestone: added close-app intent parsing and confirmation pipeline.
+- Completed milestone: added project-launch intent parsing and confirmation pipeline.
+- Completed milestone: added bridge endpoints for /api/system/close and /api/system/project/open with allowlist controls.
+- Added bridge health exposure for close targets and mapped project targets.
+- Added project path environment mappings in .env.example and documentation updates in README.
+- Updated quick suggestions to expose new close/project command flows.
+- Verified frontend build success and no diagnostics errors in changed files.
+- Verified runtime endpoint behavior: close target returns expected already_closed status and project launch opens mapped workspace.
+- Next objective: implement real filesystem search and web summarize command flow to complete remaining Phase 1 gaps.
+- Completed milestone: fixed close command behavior for web targets (for example: "close the youtube").
+- Completed milestone: added project-close intent and bridge execution path (for example: "close the hospital project").
+- Completed milestone: implemented real filesystem filename search via bridge endpoint (/api/system/file-search).
+- Completed milestone: implemented web browse/summarize flow via bridge endpoint (/api/web/summarize).
+- Updated app pipeline to run file-search and web-summary as async bridge-backed actions with fallback/recovery guidance.
+- Added new environment controls for search roots, search limits, web summary timeout, and web close process list.
+- Verified runtime responses for close web, close project, file search, and web summary on local bridge test port.
+- Next objective: run Phase 1 stabilization pass and finalize MVP sign-off checklist.

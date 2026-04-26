@@ -1,6 +1,11 @@
 export const COMMAND_TYPES = Object.freeze({
   STATUS: 'status',
+  RUNTIME_DIAGNOSTIC: 'runtime-diagnostic',
   LAUNCH_APP: 'launch-app',
+  CLOSE_APP: 'close-app',
+  OPEN_PROJECT: 'open-project',
+  CLOSE_PROJECT: 'close-project',
+  WEB_SUMMARIZE: 'web-summarize',
   SAVE_NOTE: 'save-note',
   SAVE_JOURNAL: 'save-journal',
   DAILY_RECAP: 'daily-recap',
@@ -41,8 +46,38 @@ const WEB_TARGET_CATALOG = [
   { label: 'ChatGPT', aliases: ['chatgpt'], url: 'https://chatgpt.com' },
 ]
 
+const PROJECT_CATALOG = [
+  {
+    id: 'jarvis',
+    label: 'Jarvis AI Personal Assistant',
+    aliases: ['jarvis', 'jarvis ai', 'jarvis project', 'assistant project'],
+  },
+  {
+    id: 'freelancehub',
+    label: 'FreelanceHub',
+    aliases: ['freelancehub', 'freelance hub'],
+  },
+  {
+    id: 'portfolio',
+    label: 'Portfolio',
+    aliases: ['portfolio', 'portfolio v2', 'my portfolio'],
+  },
+  {
+    id: 'hospital-system',
+    label: 'Hospital System',
+    aliases: ['hospital', 'hospital system', 'hostipal system'],
+  },
+]
+
 function cleanExtractedText(text) {
   return text.replace(/^[\s:.,-]+/, '').trim()
+}
+
+function normalizeEntityText(text) {
+  return String(text || '')
+    .trim()
+    .replace(/^(?:the|my)\s+/i, '')
+    .trim()
 }
 
 function isNaturalStatusQuery(normalized) {
@@ -79,6 +114,96 @@ function extractLaunchTarget(cleanCommand, normalized) {
   }
 
   return cleanExtractedText(naturalMatch[1])
+}
+
+function extractCloseTarget(cleanCommand, normalized) {
+  if (
+    normalized.startsWith('close ') ||
+    normalized.startsWith('quit ') ||
+    normalized.startsWith('stop ') ||
+    normalized.startsWith('exit ')
+  ) {
+    return cleanCommand.split(' ').slice(1).join(' ').trim()
+  }
+
+  const naturalMatch = cleanCommand.match(/\b(?:close|quit|stop|exit)\b\s+(.+)$/i)
+  if (!naturalMatch?.[1]) {
+    return null
+  }
+
+  return cleanExtractedText(naturalMatch[1])
+}
+
+function extractProjectName(cleanCommand) {
+  const patterns = [
+    /(?:open|launch|start|run)\s+(?:my\s+)?(.+?)\s+project$/i,
+    /(?:open|launch|start|run)\s+project\s+(.+)$/i,
+  ]
+
+  for (const pattern of patterns) {
+    const match = cleanCommand.match(pattern)
+    if (match?.[1]) {
+      const extracted = cleanExtractedText(match[1])
+      if (extracted) {
+        return extracted
+      }
+    }
+  }
+
+  return null
+}
+
+function extractCloseProjectName(cleanCommand) {
+  const patterns = [
+    /(?:close|stop|exit|quit)\s+(?:my\s+)?(.+?)\s+project$/i,
+    /(?:close|stop|exit|quit)\s+project\s+(.+)$/i,
+  ]
+
+  for (const pattern of patterns) {
+    const match = cleanCommand.match(pattern)
+    if (match?.[1]) {
+      const extracted = cleanExtractedText(match[1])
+      if (extracted) {
+        return extracted
+      }
+    }
+  }
+
+  return null
+}
+
+function extractWebSummaryRequest(cleanCommand, normalized) {
+  const urlMatch = cleanCommand.match(/(https?:\/\/\S+|www\.\S+)/i)
+  const extractedUrl = urlMatch?.[1] || null
+
+  if (normalized.startsWith('summarize ') || normalized.startsWith('browse ') || normalized.startsWith('web summary ')) {
+    const query = cleanCommand
+      .replace(/^summarize\s*/i, '')
+      .replace(/^browse\s*/i, '')
+      .replace(/^web summary\s*/i, '')
+      .trim()
+
+    return {
+      url: extractedUrl,
+      query: query || null,
+    }
+  }
+
+  if (normalized.includes('trending in tech') || normalized.includes('tech news')) {
+    return {
+      url: null,
+      query: 'trending in tech',
+    }
+  }
+
+  if ((normalized.includes('summarize') || normalized.includes('browse')) && extractedUrl) {
+    return {
+      url: extractedUrl,
+      query: null,
+    }
+  }
+
+  return null
 }
 
 function extractNaturalNoteText(cleanCommand) {
@@ -136,6 +261,18 @@ function isDailyRecapRequest(normalized) {
     normalized.includes('summary of today') ||
     normalized.includes('what did i do today') ||
     normalized.includes('show my today tasks')
+  )
+}
+
+function isRuntimeDiagnosticRequest(normalized) {
+  return (
+    normalized.includes('diagnose launch') ||
+    normalized.includes('launch issue') ||
+    normalized.includes('not opening') ||
+    normalized.includes('why not opening') ||
+    normalized.includes('why app not opening') ||
+    normalized === 'diagnose' ||
+    normalized === 'diagnostics'
   )
 }
 
@@ -229,13 +366,26 @@ function resolveWebTarget(targetText) {
 }
 
 function resolveAppTarget(targetText) {
-  const normalizedTarget = targetText.toLowerCase()
+  const normalizedTarget = normalizeEntityText(targetText).toLowerCase()
   const appMatch = APP_CATALOG.find((app) => app.aliases.some((alias) => normalizedTarget.includes(alias)))
   if (appMatch) {
     return appMatch
   }
 
-  return resolveWebTarget(targetText)
+  return resolveWebTarget(normalizedTarget)
+}
+
+function resolveProjectTarget(projectText) {
+  const normalizedTarget = normalizeEntityText(projectText).toLowerCase().trim()
+
+  return PROJECT_CATALOG.find((project) =>
+    project.aliases.some(
+      (alias) =>
+        normalizedTarget === alias ||
+        normalizedTarget.includes(alias) ||
+        alias.includes(normalizedTarget),
+    ),
+  ) || null
 }
 
 export function routeCommand(command, statusMeters) {
@@ -255,6 +405,16 @@ export function routeCommand(command, statusMeters) {
       reply: formatStatus(statusMeters),
       action: null,
       intent: COMMAND_TYPES.STATUS,
+    }
+  }
+
+  if (isRuntimeDiagnosticRequest(normalized)) {
+    return {
+      reply: 'Running runtime diagnostics for launch and system channels...',
+      action: {
+        type: COMMAND_TYPES.RUNTIME_DIAGNOSTIC,
+      },
+      intent: COMMAND_TYPES.RUNTIME_DIAGNOSTIC,
     }
   }
 
@@ -282,6 +442,60 @@ export function routeCommand(command, statusMeters) {
     }
   }
 
+  const projectName = extractProjectName(cleanCommand)
+  if (projectName) {
+    const resolvedProject = resolveProjectTarget(projectName)
+
+    return {
+      reply: resolvedProject
+        ? `Project launch intent captured for ${resolvedProject.label}. Preparing a safe execution preview.`
+        : `Project launch intent captured for ${projectName}. Add project mapping in bridge env to enable execution.`,
+      action: {
+        type: COMMAND_TYPES.OPEN_PROJECT,
+        payload: {
+          projectName,
+          resolvedProject,
+        },
+        requiresConfirmation: true,
+        executionMode: 'preview-only',
+      },
+      intent: COMMAND_TYPES.OPEN_PROJECT,
+    }
+  }
+
+  const closeProjectName = extractCloseProjectName(cleanCommand)
+  if (closeProjectName) {
+    const resolvedProject = resolveProjectTarget(closeProjectName)
+
+    return {
+      reply: resolvedProject
+        ? `Project close intent captured for ${resolvedProject.label}. Preparing a safe execution preview.`
+        : `Project close intent captured for ${closeProjectName}. Add project mapping in bridge env to enable execution.`,
+      action: {
+        type: COMMAND_TYPES.CLOSE_PROJECT,
+        payload: {
+          projectName: closeProjectName,
+          resolvedProject,
+        },
+        requiresConfirmation: true,
+        executionMode: 'preview-only',
+      },
+      intent: COMMAND_TYPES.CLOSE_PROJECT,
+    }
+  }
+
+  const webSummaryRequest = extractWebSummaryRequest(cleanCommand, normalized)
+  if (webSummaryRequest) {
+    return {
+      reply: 'Web summary request accepted. Fetching and condensing information now...',
+      action: {
+        type: COMMAND_TYPES.WEB_SUMMARIZE,
+        payload: webSummaryRequest,
+      },
+      intent: COMMAND_TYPES.WEB_SUMMARIZE,
+    }
+  }
+
   const launchTarget = extractLaunchTarget(cleanCommand, normalized)
   if (launchTarget) {
     const target = launchTarget
@@ -301,6 +515,27 @@ export function routeCommand(command, statusMeters) {
         executionMode: 'preview-only',
       },
       intent: COMMAND_TYPES.LAUNCH_APP,
+    }
+  }
+
+  const closeTarget = extractCloseTarget(cleanCommand, normalized)
+  if (closeTarget) {
+    const resolvedTarget = resolveAppTarget(closeTarget)
+
+    return {
+      reply: resolvedTarget
+        ? `Close intent captured for ${resolvedTarget.label}. Preparing a safe execution preview.`
+        : `Close intent captured for ${closeTarget || 'target app'}. Use names like VS Code, terminal, Chrome, or Spotify.`,
+      action: {
+        type: COMMAND_TYPES.CLOSE_APP,
+        payload: {
+          target: closeTarget || 'target app',
+          resolvedTarget,
+        },
+        requiresConfirmation: true,
+        executionMode: 'preview-only',
+      },
+      intent: COMMAND_TYPES.CLOSE_APP,
     }
   }
 
@@ -372,7 +607,7 @@ export function routeCommand(command, statusMeters) {
   if (normalized === 'help' || normalized.includes('what can you do')) {
     return {
       reply:
-        'Available now: status checks, launch intents with confirmation, local search, notes save/list, daily journal capture, and daily recap summaries.',
+        'Available now: status checks, runtime diagnostics, launch/close app intents with confirmation, project open/close intents, real file search, web summarize, notes save/list, daily journal capture, and daily recap summaries.',
       action: null,
       intent: COMMAND_TYPES.HELP,
     }

@@ -1,12 +1,21 @@
 import { createServer } from 'node:http'
 import os from 'node:os'
 import { spawn } from 'node:child_process'
+import path from 'node:path'
 
 const PORT = Number(process.env.MODEL_BRIDGE_PORT || 8787)
 const REQUEST_TIMEOUT_MS = Number(process.env.MODEL_BRIDGE_REQUEST_TIMEOUT_MS || 12000)
 const TELEMETRY_REFRESH_MS = Number(process.env.SYSTEM_TELEMETRY_REFRESH_MS || 5000)
 const SYSTEM_PING_HOST = process.env.SYSTEM_PING_HOST || '1.1.1.1'
+const FILE_SEARCH_TIMEOUT_MS = Number(process.env.SYSTEM_FILE_SEARCH_TIMEOUT_MS || 12000)
+const WEB_SUMMARY_FETCH_TIMEOUT_MS = Number(process.env.SYSTEM_WEB_SUMMARY_FETCH_TIMEOUT_MS || 9000)
+const FILE_SEARCH_MAX_RESULTS = Number(process.env.SYSTEM_FILE_SEARCH_MAX_RESULTS || 8)
 const ALLOWED_ORIGINS = (process.env.MODEL_BRIDGE_ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173')
+  .split(',')
+  .map((item) => item.trim())
+  .filter(Boolean)
+
+const FILE_SEARCH_ROOTS = (process.env.SYSTEM_FILE_SEARCH_ROOTS || `${process.cwd()},${os.homedir()}`)
   .split(',')
   .map((item) => item.trim())
   .filter(Boolean)
@@ -26,6 +35,24 @@ const APP_COMMANDS = {
   spotify: process.env.SYSTEM_APP_SPOTIFY || 'spotify',
 }
 
+const PROJECT_PATHS = {
+  jarvis: process.env.SYSTEM_PROJECT_JARVIS || process.cwd(),
+  freelancehub: process.env.SYSTEM_PROJECT_FREELANCEHUB || '',
+  portfolio: process.env.SYSTEM_PROJECT_PORTFOLIO || '',
+  'hospital-system': process.env.SYSTEM_PROJECT_HOSPITAL || '',
+}
+
+const CLOSE_PROCESS_ALLOWLIST = {
+  vscode: ['Code.exe'],
+  terminal: ['WindowsTerminal.exe', 'wt.exe', 'powershell.exe', 'cmd.exe'],
+  chrome: ['chrome.exe'],
+  spotify: ['Spotify.exe'],
+  web: (process.env.SYSTEM_WEB_CLOSE_PROCESSES || 'chrome.exe,msedge.exe,firefox.exe')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean),
+}
+
 const LAUNCH_ALLOWLIST = {
   vscode: { label: 'VS Code' },
   terminal: { label: 'Terminal' },
@@ -33,6 +60,15 @@ const LAUNCH_ALLOWLIST = {
   spotify: { label: 'Spotify' },
   web: { label: 'Website' },
 }
+
+const PROJECT_ALLOWLIST = {
+  jarvis: { label: 'Jarvis AI Personal Assistant' },
+  freelancehub: { label: 'FreelanceHub' },
+  portfolio: { label: 'Portfolio' },
+  'hospital-system': { label: 'Hospital System' },
+}
+
+const PROJECT_EDITOR_CLOSE_TARGET = process.env.SYSTEM_PROJECT_EDITOR_CLOSE_TARGET || 'vscode'
 
 function createCpuTimesSnapshot() {
   const cpus = os.cpus() || []
@@ -225,6 +261,10 @@ function parseJsonBody(req) {
   })
 }
 
+function escapePowerShellLiteral(value) {
+  return String(value || '').replace(/'/g, "''")
+}
+
 function normalizeHttpUrl(rawValue) {
   const candidate = String(rawValue || '').trim()
   if (!candidate || /\s/.test(candidate)) {
@@ -253,6 +293,15 @@ function withTimeout(timeoutMs) {
     signal: controller.signal,
     clear: () => clearTimeout(timer),
   }
+}
+
+function withNodeTimeout(promise, timeoutMs, timeoutReason = 'timeout') {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(timeoutReason)), timeoutMs)
+    }),
+  ])
 }
 
 function getProviderConfig(provider) {
@@ -441,6 +490,404 @@ function runLaunchAttempt(attempt) {
   })
 }
 
+function runWhereSearch(rootPath, query, maxResults) {
+  return new Promise((resolve) => {
+    const wildcard = `*${query.replace(/["<>|]/g, '').trim()}*`
+    const child = spawn('where', ['/r', rootPath, wildcard], {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: false,
+    })
+
+    let output = ''
+
+    child.stdout?.on('data', (chunk) => {
+      output += chunk.toString()
+    })
+
+    child.stderr?.on('data', (chunk) => {
+      output += chunk.toString()
+    })
+
+    child.on('error', () => {
+      resolve([])
+    })
+
+    child.on('close', () => {
+      const lines = output
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .filter((line) => !line.toLowerCase().includes('info: could not find files'))
+        .slice(0, maxResults)
+
+      resolve(lines)
+    })
+  })
+}
+
+async function executeFilesystemSearch(query, maxResults) {
+  const sanitizedQuery = String(query || '').trim()
+  if (!sanitizedQuery) {
+    return {
+      ok: false,
+      reason: 'validation_error',
+      reply: 'File search query is required.',
+      results: [],
+    }
+  }
+
+  const dedupe = new Set()
+
+  for (const root of FILE_SEARCH_ROOTS) {
+    if (dedupe.size >= maxResults) {
+      break
+    }
+
+    const resolvedRoot = path.resolve(root)
+
+    let matches = []
+    try {
+      if (process.platform === 'win32') {
+        matches = await withNodeTimeout(runWhereSearch(resolvedRoot, sanitizedQuery, maxResults), FILE_SEARCH_TIMEOUT_MS)
+      }
+    } catch {
+      matches = []
+    }
+
+    matches.forEach((match) => {
+      if (dedupe.size < maxResults) {
+        dedupe.add(match)
+      }
+    })
+  }
+
+  return {
+    ok: true,
+    reason: null,
+    reply: dedupe.size > 0 ? `File search completed for "${sanitizedQuery}".` : `No filesystem matches found for "${sanitizedQuery}".`,
+    results: Array.from(dedupe),
+  }
+}
+
+function stripHtmlToText(html) {
+  return String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function summarizeText(text, maxLength = 460) {
+  const compact = String(text || '').trim()
+  if (!compact) {
+    return 'No meaningful content was extracted from the source.'
+  }
+
+  const sentences = compact.match(/[^.!?]+[.!?]?/g) || []
+  const selected = []
+  let totalLength = 0
+
+  for (const sentence of sentences) {
+    const clean = sentence.trim()
+    if (!clean) {
+      continue
+    }
+
+    if (totalLength + clean.length > maxLength) {
+      break
+    }
+
+    selected.push(clean)
+    totalLength += clean.length + 1
+
+    if (selected.length >= 3) {
+      break
+    }
+  }
+
+  if (selected.length === 0) {
+    return compact.slice(0, maxLength)
+  }
+
+  return selected.join(' ')
+}
+
+async function fetchText(url) {
+  const timeout = withTimeout(WEB_SUMMARY_FETCH_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      signal: timeout.signal,
+      headers: {
+        'User-Agent': 'Jarvis-Bridge/1.0',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`http_${response.status}`)
+    }
+
+    return await response.text()
+  } finally {
+    timeout.clear()
+  }
+}
+
+async function summarizeWebRequest(url, query) {
+  const normalizedUrl = normalizeHttpUrl(url)
+
+  if (normalizedUrl) {
+    try {
+      const html = await fetchText(normalizedUrl)
+      const plainText = stripHtmlToText(html)
+      const summary = summarizeText(plainText)
+
+      return {
+        ok: true,
+        reason: null,
+        reply: `Web summary for ${normalizedUrl}: ${summary}`,
+      }
+    } catch (error) {
+      return {
+        ok: false,
+        reason: error?.message || 'fetch_failed',
+        reply: `Failed to fetch summary from ${normalizedUrl}.`,
+      }
+    }
+  }
+
+  const trimmedQuery = String(query || '').trim()
+  if (!trimmedQuery) {
+    return {
+      ok: false,
+      reason: 'validation_error',
+      reply: 'Web summary requires a valid URL or query.',
+    }
+  }
+
+  try {
+    const endpoint = `https://api.duckduckgo.com/?q=${encodeURIComponent(trimmedQuery)}&format=json&no_html=1&skip_disambig=1`
+    const payload = JSON.parse(await fetchText(endpoint))
+
+    const candidates = []
+    if (payload?.AbstractText) {
+      candidates.push(payload.AbstractText)
+    }
+
+    if (Array.isArray(payload?.RelatedTopics)) {
+      payload.RelatedTopics.slice(0, 4).forEach((item) => {
+        if (typeof item?.Text === 'string') {
+          candidates.push(item.Text)
+        }
+      })
+    }
+
+    const sourceText = candidates.join(' ')
+    const summary = summarizeText(sourceText)
+
+    return {
+      ok: true,
+      reason: null,
+      reply: `Web summary for "${trimmedQuery}": ${summary}`,
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error?.message || 'fetch_failed',
+      reply: `Failed to summarize web query "${trimmedQuery}".`,
+    }
+  }
+}
+
+function buildProjectOpenAttempts(projectPath) {
+  if (process.platform === 'win32') {
+    return [
+      { command: APP_COMMANDS.vscode, args: [projectPath], description: `${APP_COMMANDS.vscode} ${projectPath}` },
+      { command: 'cmd', args: ['/c', 'start', '', APP_COMMANDS.vscode, projectPath], description: `start ${APP_COMMANDS.vscode}` },
+    ]
+  }
+
+  return [{ command: APP_COMMANDS.vscode, args: [projectPath], description: `${APP_COMMANDS.vscode} ${projectPath}` }]
+}
+
+function normalizeProjectPath(projectPath) {
+  const normalized = String(projectPath || '').trim()
+  if (!normalized) {
+    return null
+  }
+
+  return normalized
+}
+
+async function executeOpenProject(projectId) {
+  const allowedProject = PROJECT_ALLOWLIST[projectId]
+  if (!allowedProject) {
+    return {
+      ok: false,
+      reason: 'project_not_allowed',
+      reply: `Project ${projectId} is not in the allowlist.`,
+    }
+  }
+
+  const projectPath = normalizeProjectPath(PROJECT_PATHS[projectId])
+  if (!projectPath) {
+    return {
+      ok: false,
+      reason: 'project_not_configured',
+      reply: `Project path for ${allowedProject.label} is not configured in bridge environment.`,
+    }
+  }
+
+  const attempts = buildProjectOpenAttempts(projectPath)
+  let lastReason = 'unknown_failure'
+
+  for (const attempt of attempts) {
+    const outcome = await runLaunchAttempt(attempt)
+    if (outcome.ok) {
+      return {
+        ok: true,
+        reason: null,
+        reply: `Project launch executed for ${allowedProject.label} (${projectPath}).`,
+      }
+    }
+
+    lastReason = outcome.reason || lastReason
+  }
+
+  return {
+    ok: false,
+    reason: lastReason,
+    reply: `Failed to launch project ${allowedProject.label} (${lastReason}).`,
+  }
+}
+
+function runTaskkillAttempt(processName) {
+  return new Promise((resolve) => {
+    const child = spawn('taskkill', ['/IM', processName, '/F'], {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: false,
+    })
+
+    let output = ''
+
+    child.stdout?.on('data', (chunk) => {
+      output += chunk.toString()
+    })
+
+    child.stderr?.on('data', (chunk) => {
+      output += chunk.toString()
+    })
+
+    child.on('error', () => {
+      resolve({ ok: false, reason: 'spawn_error', output })
+    })
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve({ ok: true, reason: null, output })
+        return
+      }
+
+      if (/not found|no running instance/i.test(output)) {
+        resolve({ ok: true, reason: 'already_closed', output })
+        return
+      }
+
+      resolve({ ok: false, reason: `exit_${code}`, output })
+    })
+  })
+}
+
+async function executeCloseTarget(targetId) {
+  const processes = CLOSE_PROCESS_ALLOWLIST[targetId]
+  if (!processes || processes.length === 0) {
+    return {
+      ok: false,
+      reason: 'target_not_allowed',
+      reply: `Close target ${targetId} is not in the allowlist.`,
+    }
+  }
+
+  let killCount = 0
+  let alreadyClosedCount = 0
+  let lastReason = 'unknown_failure'
+
+  for (const processName of processes) {
+    const result = await runTaskkillAttempt(processName)
+    if (result.ok && result.reason === null) {
+      killCount += 1
+      continue
+    }
+
+    if (result.ok && result.reason === 'already_closed') {
+      alreadyClosedCount += 1
+      continue
+    }
+
+    lastReason = result.reason || lastReason
+  }
+
+  if (killCount > 0) {
+    return {
+      ok: true,
+      reason: null,
+      reply: `Close command executed for ${targetId}.`,
+    }
+  }
+
+  if (alreadyClosedCount === processes.length) {
+    return {
+      ok: true,
+      reason: 'already_closed',
+      reply: `No running process was found for ${targetId}; it appears already closed.`,
+    }
+  }
+
+  return {
+    ok: false,
+    reason: lastReason,
+    reply: `Failed to execute close command for ${targetId} (${lastReason}).`,
+  }
+}
+
+async function executeCloseProject(projectId) {
+  const allowedProject = PROJECT_ALLOWLIST[projectId]
+  if (!allowedProject) {
+    return {
+      ok: false,
+      reason: 'project_not_allowed',
+      reply: `Project ${projectId} is not in the allowlist.`,
+    }
+  }
+
+  const projectPath = normalizeProjectPath(PROJECT_PATHS[projectId])
+  if (!projectPath) {
+    return {
+      ok: false,
+      reason: 'project_not_configured',
+      reply: `Project path for ${allowedProject.label} is not configured in bridge environment.`,
+    }
+  }
+
+  const closeResult = await executeCloseTarget(PROJECT_EDITOR_CLOSE_TARGET)
+  if (!closeResult.ok) {
+    return closeResult
+  }
+
+  return {
+    ok: true,
+    reason: closeResult.reason,
+    reply:
+      closeResult.reason === 'already_closed'
+        ? `Project close request processed for ${allowedProject.label}; editor already appears closed.`
+        : `Project close executed for ${allowedProject.label}.`,
+  }
+}
+
 async function executeLaunchTarget(targetId, targetUrl) {
   const allowedTarget = LAUNCH_ALLOWLIST[targetId]
   if (!allowedTarget) {
@@ -514,6 +961,8 @@ const server = createServer(async (req, res) => {
         service: 'jarvis-model-bridge',
         systemActionsEnabled: SYSTEM_ACTIONS_ENABLED,
         launchTargets: Object.keys(LAUNCH_ALLOWLIST),
+        closeTargets: Object.keys(CLOSE_PROCESS_ALLOWLIST),
+        projectTargets: Object.keys(PROJECT_ALLOWLIST).filter((projectId) => Boolean(normalizeProjectPath(PROJECT_PATHS[projectId]))),
         telemetry: {
           status: latestSystemTelemetry.status,
           source: latestSystemTelemetry.source,
@@ -527,6 +976,59 @@ const server = createServer(async (req, res) => {
       origin,
     )
     return
+  }
+
+  if (req.method === 'POST' && req.url === '/api/system/close') {
+    try {
+      const body = await parseJsonBody(req)
+      const confirmed = Boolean(body?.confirmed)
+      const targetId = typeof body?.targetId === 'string' ? body.targetId.trim().toLowerCase() : ''
+
+      if (!confirmed || !targetId) {
+        sendJson(
+          res,
+          400,
+          {
+            ok: false,
+            reason: 'validation_error',
+            reply: 'Close request requires confirmed=true and targetId.',
+          },
+          origin,
+        )
+        return
+      }
+
+      if (!SYSTEM_ACTIONS_ENABLED) {
+        sendJson(
+          res,
+          403,
+          {
+            ok: false,
+            reason: 'system_actions_disabled',
+            reply: 'System actions are disabled by bridge safety policy.',
+          },
+          origin,
+        )
+        return
+      }
+
+      const result = await executeCloseTarget(targetId)
+      sendJson(res, result.ok ? 200 : 502, result, origin)
+      return
+    } catch (error) {
+      const reason = error?.message || 'bridge_error'
+      sendJson(
+        res,
+        400,
+        {
+          ok: false,
+          reason,
+          reply: `System close request failed (${reason}).`,
+        },
+        origin,
+      )
+      return
+    }
   }
 
   if (req.method === 'GET' && req.url === '/api/system/status') {
@@ -635,6 +1137,163 @@ const server = createServer(async (req, res) => {
           ok: false,
           reason,
           reply: `System launch request failed (${reason}).`,
+        },
+        origin,
+      )
+      return
+    }
+  }
+
+  if (req.method === 'POST' && req.url === '/api/system/project/open') {
+    try {
+      const body = await parseJsonBody(req)
+      const confirmed = Boolean(body?.confirmed)
+      const projectId = typeof body?.projectId === 'string' ? body.projectId.trim().toLowerCase() : ''
+
+      if (!confirmed || !projectId) {
+        sendJson(
+          res,
+          400,
+          {
+            ok: false,
+            reason: 'validation_error',
+            reply: 'Project open request requires confirmed=true and projectId.',
+          },
+          origin,
+        )
+        return
+      }
+
+      if (!SYSTEM_ACTIONS_ENABLED) {
+        sendJson(
+          res,
+          403,
+          {
+            ok: false,
+            reason: 'system_actions_disabled',
+            reply: 'System actions are disabled by bridge safety policy.',
+          },
+          origin,
+        )
+        return
+      }
+
+      const result = await executeOpenProject(projectId)
+      sendJson(res, result.ok ? 200 : 502, result, origin)
+      return
+    } catch (error) {
+      const reason = error?.message || 'bridge_error'
+      sendJson(
+        res,
+        400,
+        {
+          ok: false,
+          reason,
+          reply: `Project open request failed (${reason}).`,
+        },
+        origin,
+      )
+      return
+    }
+  }
+
+  if (req.method === 'POST' && req.url === '/api/system/project/close') {
+    try {
+      const body = await parseJsonBody(req)
+      const confirmed = Boolean(body?.confirmed)
+      const projectId = typeof body?.projectId === 'string' ? body.projectId.trim().toLowerCase() : ''
+
+      if (!confirmed || !projectId) {
+        sendJson(
+          res,
+          400,
+          {
+            ok: false,
+            reason: 'validation_error',
+            reply: 'Project close request requires confirmed=true and projectId.',
+          },
+          origin,
+        )
+        return
+      }
+
+      if (!SYSTEM_ACTIONS_ENABLED) {
+        sendJson(
+          res,
+          403,
+          {
+            ok: false,
+            reason: 'system_actions_disabled',
+            reply: 'System actions are disabled by bridge safety policy.',
+          },
+          origin,
+        )
+        return
+      }
+
+      const result = await executeCloseProject(projectId)
+      sendJson(res, result.ok ? 200 : 502, result, origin)
+      return
+    } catch (error) {
+      const reason = error?.message || 'bridge_error'
+      sendJson(
+        res,
+        400,
+        {
+          ok: false,
+          reason,
+          reply: `Project close request failed (${reason}).`,
+        },
+        origin,
+      )
+      return
+    }
+  }
+
+  if (req.method === 'POST' && req.url === '/api/system/file-search') {
+    try {
+      const body = await parseJsonBody(req)
+      const query = typeof body?.query === 'string' ? body.query.trim() : ''
+      const maxResults = Number(body?.maxResults || FILE_SEARCH_MAX_RESULTS)
+
+      const result = await executeFilesystemSearch(query, Math.max(1, Math.min(20, maxResults)))
+      sendJson(res, result.ok ? 200 : 400, result, origin)
+      return
+    } catch (error) {
+      const reason = error?.message || 'bridge_error'
+      sendJson(
+        res,
+        400,
+        {
+          ok: false,
+          reason,
+          reply: `Filesystem search request failed (${reason}).`,
+          results: [],
+        },
+        origin,
+      )
+      return
+    }
+  }
+
+  if (req.method === 'POST' && req.url === '/api/web/summarize') {
+    try {
+      const body = await parseJsonBody(req)
+      const url = typeof body?.url === 'string' ? body.url.trim() : ''
+      const query = typeof body?.query === 'string' ? body.query.trim() : ''
+
+      const result = await summarizeWebRequest(url, query)
+      sendJson(res, result.ok ? 200 : 502, result, origin)
+      return
+    } catch (error) {
+      const reason = error?.message || 'bridge_error'
+      sendJson(
+        res,
+        400,
+        {
+          ok: false,
+          reason,
+          reply: `Web summary request failed (${reason}).`,
         },
         origin,
       )
