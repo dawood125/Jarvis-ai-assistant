@@ -119,3 +119,8 @@
 - Added new environment controls for search roots, search limits, web summary timeout, and web close process list.
 - Verified runtime responses for close web, close project, file search, and web summary on local bridge test port.
 - Next objective: run Phase 1 stabilization pass and finalize MVP sign-off checklist.
+- Completed milestone: fixed web-summary URL parsing to avoid duplicate URL/query payload.
+- Completed milestone: executed final Phase 1 command QA matrix for launch/close/project/search/web-summary intents.
+- Completed milestone: verified runtime endpoint matrix on bridge test port (health, close web, close project, file search, web summary URL/query).
+- Phase 1 sign-off status: core MVP command surface is now stable and validated for daily use.
+- Next objective: start Phase 2 foundation with SQLite-backed persistent memory and migration from localStorage.

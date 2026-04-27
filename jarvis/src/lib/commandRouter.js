@@ -181,6 +181,7 @@ function extractWebSummaryRequest(cleanCommand, normalized) {
       .replace(/^summarize\s*/i, '')
       .replace(/^browse\s*/i, '')
       .replace(/^web summary\s*/i, '')
+      .replace(/(https?:\/\/\S+|www\.\S+)/i, '')
       .trim()
 
     return {

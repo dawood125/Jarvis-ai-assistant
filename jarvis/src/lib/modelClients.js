@@ -4,6 +4,11 @@ const MODEL_CALL_TIMEOUT_MS = 12000
 const DEFAULT_BRIDGE_PATH = '/api/model/reply'
 const DEFAULT_BRIDGE_HEALTH_PATH = '/health'
 const DEFAULT_SYSTEM_STATUS_PATH = '/api/system/status'
+const DEFAULT_MEMORY_BOOTSTRAP_PATH = '/api/memory/bootstrap'
+const DEFAULT_MEMORY_MIGRATE_PATH = '/api/memory/migrate'
+const DEFAULT_MEMORY_CHAT_PATH = '/api/memory/chat'
+const DEFAULT_MEMORY_NOTE_PATH = '/api/memory/note'
+const DEFAULT_MEMORY_JOURNAL_PATH = '/api/memory/journal'
 
 function resolveBridgeUrl() {
   const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
@@ -30,6 +35,51 @@ function resolveSystemStatusUrl() {
   }
 
   return `${baseUrl.replace(/\/$/, '')}${DEFAULT_SYSTEM_STATUS_PATH}`
+}
+
+function resolveMemoryBootstrapUrl() {
+  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  if (!baseUrl) {
+    return DEFAULT_MEMORY_BOOTSTRAP_PATH
+  }
+
+  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_MEMORY_BOOTSTRAP_PATH}`
+}
+
+function resolveMemoryMigrateUrl() {
+  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  if (!baseUrl) {
+    return DEFAULT_MEMORY_MIGRATE_PATH
+  }
+
+  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_MEMORY_MIGRATE_PATH}`
+}
+
+function resolveMemoryChatUrl() {
+  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  if (!baseUrl) {
+    return DEFAULT_MEMORY_CHAT_PATH
+  }
+
+  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_MEMORY_CHAT_PATH}`
+}
+
+function resolveMemoryNoteUrl() {
+  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  if (!baseUrl) {
+    return DEFAULT_MEMORY_NOTE_PATH
+  }
+
+  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_MEMORY_NOTE_PATH}`
+}
+
+function resolveMemoryJournalUrl() {
+  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  if (!baseUrl) {
+    return DEFAULT_MEMORY_JOURNAL_PATH
+  }
+
+  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_MEMORY_JOURNAL_PATH}`
 }
 
 export async function fetchBridgeHealth() {
@@ -112,6 +162,113 @@ export async function fetchSystemTelemetry() {
         networkPingMs: null,
       },
     }
+  }
+}
+
+export async function fetchMemoryBootstrap() {
+  try {
+    const response = await fetch(resolveMemoryBootstrapUrl())
+    if (!response.ok) {
+      return {
+        ok: false,
+        reason: `bridge_http_${response.status}`,
+        conversations: [],
+        notes: [],
+        journalEntries: [],
+      }
+    }
+
+    const payload = await response.json()
+    return {
+      ok: Boolean(payload?.ok),
+      reason: payload?.reason || null,
+      conversations: Array.isArray(payload?.conversations) ? payload.conversations : [],
+      notes: Array.isArray(payload?.notes) ? payload.notes : [],
+      journalEntries: Array.isArray(payload?.journalEntries) ? payload.journalEntries : [],
+    }
+  } catch {
+    return {
+      ok: false,
+      reason: 'bridge_unreachable',
+      conversations: [],
+      notes: [],
+      journalEntries: [],
+    }
+  }
+}
+
+export async function migrateLocalMemoryToBridge(payload) {
+  try {
+    const response = await fetch(resolveMemoryMigrateUrl(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload || {}),
+    })
+
+    const body = await response.json()
+    return {
+      ok: Boolean(body?.ok && response.ok),
+      reason: body?.reason || null,
+      inserted: body?.inserted || {
+        conversations: 0,
+        notes: 0,
+        journalEntries: 0,
+      },
+    }
+  } catch {
+    return {
+      ok: false,
+      reason: 'bridge_unreachable',
+      inserted: {
+        conversations: 0,
+        notes: 0,
+        journalEntries: 0,
+      },
+    }
+  }
+}
+
+export async function persistConversationMessage(payload) {
+  try {
+    await fetch(resolveMemoryChatUrl(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload || {}),
+    })
+  } catch {
+    // Keep local UX non-blocking if bridge memory is unavailable.
+  }
+}
+
+export async function persistNoteMessage(payload) {
+  try {
+    await fetch(resolveMemoryNoteUrl(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload || {}),
+    })
+  } catch {
+    // Keep local UX non-blocking if bridge memory is unavailable.
+  }
+}
+
+export async function persistJournalMessage(payload) {
+  try {
+    await fetch(resolveMemoryJournalUrl(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload || {}),
+    })
+  } catch {
+    // Keep local UX non-blocking if bridge memory is unavailable.
   }
 }
 

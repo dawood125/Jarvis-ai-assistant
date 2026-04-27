@@ -52,7 +52,8 @@
 - Milestone 11 [done]: Added richer command failure guidance and actionable recovery prompts in chat responses.
 - Milestone 12 [done]: Added close-app and project-launch command execution flows with safe confirmations.
 - Milestone 13 [done]: Implemented real filesystem search, web summarize flow, and close-project coverage for remaining Phase 1 gaps.
-- Milestone 14 [next]: Phase 1 stabilization pass (command QA matrix, edge-case handling, and packaging readiness check).
+- Milestone 14 [done]: Completed Phase 1 stabilization pass with routing fixes and runtime QA matrix sign-off.
+- Milestone 15 [next]: Start Phase 2 memory and learning foundation (SQLite schema + migration from localStorage).
 
 ## Session Rule
 - Daily time budget: about 1 hour

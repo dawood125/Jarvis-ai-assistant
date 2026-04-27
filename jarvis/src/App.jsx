@@ -15,12 +15,21 @@ import {
   executeWebSummaryAction,
 } from './lib/commandActions'
 import { COMMAND_TYPES, routeCommand } from './lib/commandRouter'
-import { fetchBridgeHealth, fetchSystemTelemetry } from './lib/modelClients'
+import {
+  fetchBridgeHealth,
+  fetchMemoryBootstrap,
+  fetchSystemTelemetry,
+  migrateLocalMemoryToBridge,
+  persistConversationMessage,
+  persistJournalMessage,
+  persistNoteMessage,
+} from './lib/modelClients'
 import { readModelConfig, resolveModelReply, writeModelConfig } from './lib/modelRouter'
 
 const CHAT_STORAGE_KEY = 'jarvis.chat.history.v1'
 const NOTES_STORAGE_KEY = 'jarvis.notes.v1'
 const JOURNAL_STORAGE_KEY = 'jarvis.journal.v1'
+const MEMORY_MIGRATED_STORAGE_KEY = 'jarvis.memory.migrated.v1'
 
 function getDateKey(date = new Date()) {
   return date.toISOString().slice(0, 10)
@@ -37,6 +46,20 @@ function readStoredNotes() {
     return Array.isArray(parsed) ? parsed : []
   } catch {
     return []
+  }
+}
+
+function readStoredChat() {
+  try {
+    const stored = window.localStorage.getItem(CHAT_STORAGE_KEY)
+    if (!stored) {
+      return initialMessages
+    }
+
+    const parsed = JSON.parse(stored)
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : initialMessages
+  } catch {
+    return initialMessages
   }
 }
 
@@ -223,19 +246,7 @@ function buildRuntimeDiagnosticReply({ bridgeHealth, telemetry }) {
 }
 
 function App() {
-  const [messages, setMessages] = useState(() => {
-    try {
-      const stored = window.localStorage.getItem(CHAT_STORAGE_KEY)
-      if (!stored) {
-        return initialMessages
-      }
-
-      const parsed = JSON.parse(stored)
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : initialMessages
-    } catch {
-      return initialMessages
-    }
-  })
+  const [messages, setMessages] = useState(() => readStoredChat())
   const [recentActivity, setRecentActivity] = useState(initialRecentActivity)
   const [isProcessing, setIsProcessing] = useState(false)
   const [pendingAction, setPendingAction] = useState(null)
@@ -251,6 +262,7 @@ function App() {
   const [notes, setNotes] = useState(() => readStoredNotes())
   const [telemetry, setTelemetry] = useState(() => createEmptyTelemetryState())
   const responseTimerRef = useRef(null)
+  const memorySyncRef = useRef(false)
 
   const statusMeters = [
     {
@@ -296,6 +308,48 @@ function App() {
     return () => window.clearInterval(interval)
   }, [])
 
+  useEffect(() => {
+    if (bridgeHealth.status !== 'online' || memorySyncRef.current) {
+      return
+    }
+
+    memorySyncRef.current = true
+
+    const localConversations = readStoredChat()
+    const localNotes = readStoredNotes()
+    const localJournalEntries = readStoredJournal()
+    const migrationDone = window.localStorage.getItem(MEMORY_MIGRATED_STORAGE_KEY) === '1'
+
+    const syncMemory = async () => {
+      if (!migrationDone && (localConversations.length > 0 || localNotes.length > 0 || localJournalEntries.length > 0)) {
+        await migrateLocalMemoryToBridge({
+          conversations: localConversations,
+          notes: localNotes,
+          journalEntries: localJournalEntries,
+        })
+        window.localStorage.setItem(MEMORY_MIGRATED_STORAGE_KEY, '1')
+      }
+
+      const bootstrap = await fetchMemoryBootstrap()
+      if (!bootstrap.ok) {
+        return
+      }
+
+      if (bootstrap.conversations.length > 0) {
+        setMessages(bootstrap.conversations)
+        window.localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(bootstrap.conversations))
+      }
+
+      setNotes(bootstrap.notes)
+      writeStoredNotes(bootstrap.notes)
+      writeStoredJournal(bootstrap.journalEntries)
+    }
+
+    syncMemory().catch(() => {
+      memorySyncRef.current = false
+    })
+  }, [bridgeHealth.status])
+
   const handleModelConfigChange = (partialConfig) => {
     setModelConfig((prev) => writeModelConfig({ ...prev, ...partialConfig }))
   }
@@ -317,14 +371,22 @@ function App() {
     }
 
     responseTimerRef.current = window.setTimeout(() => {
+      const nextMessage = {
+        role: 'jarvis',
+        label: 'JARVIS CORE',
+        text: replyText,
+        createdAt: new Date().toISOString(),
+      }
+
       setMessages((prev) => [
         ...prev,
-        {
-          role: 'jarvis',
-          label: 'JARVIS CORE',
-          text: replyText,
-        },
+        nextMessage,
       ])
+
+      if (bridgeHealth.status === 'online') {
+        void persistConversationMessage(nextMessage)
+      }
+
       setIsProcessing(false)
       responseTimerRef.current = null
     }, 600)
@@ -338,14 +400,18 @@ function App() {
 
     const normalized = command.toLowerCase()
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: 'user',
-        label: 'YOU',
-        text: command,
-      },
-    ])
+    const userMessage = {
+      role: 'user',
+      label: 'YOU',
+      text: command,
+      createdAt: new Date().toISOString(),
+    }
+
+    setMessages((prev) => [...prev, userMessage])
+
+    if (bridgeHealth.status === 'online') {
+      void persistConversationMessage(userMessage)
+    }
 
     setIsProcessing(true)
 
@@ -446,6 +512,11 @@ function App() {
 
       writeStoredNotes(updatedNotes)
       setNotes(updatedNotes)
+
+      if (bridgeHealth.status === 'online') {
+        void persistNoteMessage(updatedNotes[0])
+      }
+
       replyText = `Note stored locally. Total notes in memory: ${updatedNotes.length}.`
       setRecentActivity((prev) => [
         {
@@ -463,6 +534,10 @@ function App() {
       const updatedEntries = [nextEntry, ...existingEntries].slice(0, 120)
 
       writeStoredJournal(updatedEntries)
+
+      if (bridgeHealth.status === 'online') {
+        void persistJournalMessage(nextEntry)
+      }
 
       const primaryTask = nextEntry.tasks[0] || journalText
       replyText = `Daily journal updated. Captured ${nextEntry.tasks.length} task(s) for today.`

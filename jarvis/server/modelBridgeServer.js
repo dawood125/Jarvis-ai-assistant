@@ -2,6 +2,8 @@ import { createServer } from 'node:http'
 import os from 'node:os'
 import { spawn } from 'node:child_process'
 import path from 'node:path'
+import { mkdirSync } from 'node:fs'
+import Database from 'better-sqlite3'
 
 const PORT = Number(process.env.MODEL_BRIDGE_PORT || 8787)
 const REQUEST_TIMEOUT_MS = Number(process.env.MODEL_BRIDGE_REQUEST_TIMEOUT_MS || 12000)
@@ -10,6 +12,7 @@ const SYSTEM_PING_HOST = process.env.SYSTEM_PING_HOST || '1.1.1.1'
 const FILE_SEARCH_TIMEOUT_MS = Number(process.env.SYSTEM_FILE_SEARCH_TIMEOUT_MS || 12000)
 const WEB_SUMMARY_FETCH_TIMEOUT_MS = Number(process.env.SYSTEM_WEB_SUMMARY_FETCH_TIMEOUT_MS || 9000)
 const FILE_SEARCH_MAX_RESULTS = Number(process.env.SYSTEM_FILE_SEARCH_MAX_RESULTS || 8)
+const MEMORY_DB_PATH = process.env.MEMORY_DB_PATH || path.join(process.cwd(), 'data', 'jarvis.db')
 const ALLOWED_ORIGINS = (process.env.MODEL_BRIDGE_ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173')
   .split(',')
   .map((item) => item.trim())
@@ -69,6 +72,336 @@ const PROJECT_ALLOWLIST = {
 }
 
 const PROJECT_EDITOR_CLOSE_TARGET = process.env.SYSTEM_PROJECT_EDITOR_CLOSE_TARGET || 'vscode'
+
+function ensureMemoryDatabase() {
+  const dbDir = path.dirname(MEMORY_DB_PATH)
+  mkdirSync(dbDir, { recursive: true })
+
+  const db = new Database(MEMORY_DB_PATH)
+  db.pragma('journal_mode = WAL')
+  db.pragma('foreign_keys = ON')
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS conversations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      role TEXT NOT NULL,
+      label TEXT,
+      message TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_conversations_created_at
+      ON conversations(created_at);
+
+    CREATE TABLE IF NOT EXISTS notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      text TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_notes_created_at
+      ON notes(created_at);
+
+    CREATE TABLE IF NOT EXISTS journal_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date_key TEXT NOT NULL,
+      raw_text TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_journal_entries_date_key
+      ON journal_entries(date_key);
+
+    CREATE INDEX IF NOT EXISTS idx_journal_entries_created_at
+      ON journal_entries(created_at);
+
+    CREATE TABLE IF NOT EXISTS journal_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entry_id INTEGER NOT NULL,
+      task_text TEXT NOT NULL,
+      task_order INTEGER NOT NULL,
+      FOREIGN KEY(entry_id) REFERENCES journal_entries(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_journal_tasks_entry_id
+      ON journal_tasks(entry_id);
+  `)
+
+  return db
+}
+
+const memoryDb = ensureMemoryDatabase()
+
+const insertConversationStmt = memoryDb.prepare(
+  `INSERT INTO conversations (role, label, message, created_at) VALUES (@role, @label, @message, @created_at)`,
+)
+
+const conversationExistsStmt = memoryDb.prepare(
+  `SELECT 1 FROM conversations WHERE role = ? AND message = ? AND created_at = ? LIMIT 1`,
+)
+
+const selectRecentConversationsStmt = memoryDb.prepare(
+  `SELECT role, label, message, created_at FROM conversations ORDER BY datetime(created_at) DESC, id DESC LIMIT ?`,
+)
+
+const insertNoteStmt = memoryDb.prepare(`INSERT INTO notes (text, created_at) VALUES (@text, @created_at)`)
+
+const noteExistsStmt = memoryDb.prepare(
+  `SELECT 1 FROM notes WHERE text = ? AND created_at = ? LIMIT 1`,
+)
+
+const selectRecentNotesStmt = memoryDb.prepare(
+  `SELECT text, created_at FROM notes ORDER BY datetime(created_at) DESC, id DESC LIMIT ?`,
+)
+
+const insertJournalEntryStmt = memoryDb.prepare(
+  `INSERT INTO journal_entries (date_key, raw_text, created_at) VALUES (@date_key, @raw_text, @created_at)`,
+)
+
+const insertJournalTaskStmt = memoryDb.prepare(
+  `INSERT INTO journal_tasks (entry_id, task_text, task_order) VALUES (@entry_id, @task_text, @task_order)`,
+)
+
+const selectRecentJournalEntriesStmt = memoryDb.prepare(
+  `SELECT id, date_key, raw_text, created_at FROM journal_entries ORDER BY datetime(created_at) DESC, id DESC LIMIT ?`,
+)
+
+const selectJournalTasksStmt = memoryDb.prepare(
+  `SELECT task_text, task_order FROM journal_tasks WHERE entry_id = ? ORDER BY task_order ASC, id ASC`,
+)
+
+const journalExistsStmt = memoryDb.prepare(
+  `SELECT id FROM journal_entries WHERE raw_text = ? AND created_at = ? LIMIT 1`,
+)
+
+function clampCount(value, min, max) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) {
+    return max
+  }
+
+  return Math.max(min, Math.min(max, Math.floor(numeric)))
+}
+
+function sanitizeTimestamp(value) {
+  const candidate = String(value || '').trim()
+  if (!candidate) {
+    return new Date().toISOString()
+  }
+
+  const parsed = new Date(candidate)
+  if (Number.isNaN(parsed.getTime())) {
+    return new Date().toISOString()
+  }
+
+  return parsed.toISOString()
+}
+
+function sanitizeDateKey(value, fallbackCreatedAt) {
+  const candidate = String(value || '').trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(candidate)) {
+    return candidate
+  }
+
+  return sanitizeTimestamp(fallbackCreatedAt).slice(0, 10)
+}
+
+function mapConversationRows(rows) {
+  return rows
+    .slice()
+    .reverse()
+    .map((row) => ({
+      role: row.role,
+      label: row.label || (row.role === 'jarvis' ? 'JARVIS CORE' : 'YOU'),
+      text: row.message,
+      createdAt: row.created_at,
+    }))
+}
+
+function mapNoteRows(rows) {
+  return rows.map((row) => ({
+    text: row.text,
+    createdAt: row.created_at,
+  }))
+}
+
+function mapJournalRows(rows) {
+  return rows.map((row) => {
+    const tasks = selectJournalTasksStmt.all(row.id).map((task) => task.task_text)
+    return {
+      dateKey: row.date_key,
+      raw: row.raw_text,
+      tasks,
+      createdAt: row.created_at,
+    }
+  })
+}
+
+function saveConversationMessage(payload) {
+  const role = payload?.role === 'jarvis' ? 'jarvis' : 'user'
+  const message = String(payload?.text || '').trim()
+  if (!message) {
+    return { ok: false, reason: 'validation_error', reply: 'Message text is required.' }
+  }
+
+  const createdAt = sanitizeTimestamp(payload?.createdAt)
+  const label = String(payload?.label || (role === 'jarvis' ? 'JARVIS CORE' : 'YOU')).trim()
+
+  if (!conversationExistsStmt.get(role, message, createdAt)) {
+    insertConversationStmt.run({
+      role,
+      label,
+      message,
+      created_at: createdAt,
+    })
+
+    return { ok: true, reason: null, reply: 'Conversation message stored.' }
+  }
+
+  return { ok: true, reason: 'duplicate', reply: 'Conversation message already exists.' }
+}
+
+function saveNoteEntry(payload) {
+  const text = String(payload?.text || '').trim()
+  if (!text) {
+    return { ok: false, reason: 'validation_error', reply: 'Note text is required.' }
+  }
+
+  const createdAt = sanitizeTimestamp(payload?.createdAt)
+
+  if (!noteExistsStmt.get(text, createdAt)) {
+    insertNoteStmt.run({
+      text,
+      created_at: createdAt,
+    })
+
+    const total = Number(memoryDb.prepare(`SELECT COUNT(*) AS count FROM notes`).get().count || 0)
+    return { ok: true, reason: null, reply: 'Note stored.', total }
+  }
+
+  const total = Number(memoryDb.prepare(`SELECT COUNT(*) AS count FROM notes`).get().count || 0)
+  return { ok: true, reason: 'duplicate', reply: 'Note already exists.', total }
+}
+
+function saveJournalEntry(payload) {
+  const rawText = String(payload?.raw || payload?.text || '').trim()
+  if (!rawText) {
+    return { ok: false, reason: 'validation_error', reply: 'Journal raw text is required.' }
+  }
+
+  const createdAt = sanitizeTimestamp(payload?.createdAt)
+  const dateKey = sanitizeDateKey(payload?.dateKey, createdAt)
+  const tasksInput = Array.isArray(payload?.tasks)
+    ? payload.tasks.map((item) => String(item || '').trim()).filter(Boolean)
+    : []
+
+  const existing = journalExistsStmt.get(rawText, createdAt)
+  if (existing?.id) {
+    return {
+      ok: true,
+      reason: 'duplicate',
+      reply: 'Journal entry already exists.',
+      taskCount: Number(selectJournalTasksStmt.all(existing.id).length || 0),
+    }
+  }
+
+  const insertTxn = memoryDb.transaction(() => {
+    const result = insertJournalEntryStmt.run({
+      date_key: dateKey,
+      raw_text: rawText,
+      created_at: createdAt,
+    })
+
+    const entryId = Number(result.lastInsertRowid)
+    const tasks = tasksInput.length > 0 ? tasksInput : [rawText]
+
+    tasks.forEach((taskText, index) => {
+      insertJournalTaskStmt.run({
+        entry_id: entryId,
+        task_text: taskText,
+        task_order: index,
+      })
+    })
+
+    return {
+      entryId,
+      taskCount: tasks.length,
+    }
+  })
+
+  const inserted = insertTxn()
+
+  return {
+    ok: true,
+    reason: null,
+    reply: 'Journal entry stored.',
+    taskCount: inserted.taskCount,
+  }
+}
+
+function loadMemoryBootstrap(limits = {}) {
+  const conversationLimit = clampCount(limits.conversationLimit, 20, 500)
+  const notesLimit = clampCount(limits.notesLimit, 20, 300)
+  const journalLimit = clampCount(limits.journalLimit, 20, 300)
+
+  const conversations = mapConversationRows(selectRecentConversationsStmt.all(conversationLimit))
+  const notes = mapNoteRows(selectRecentNotesStmt.all(notesLimit))
+  const journalEntries = mapJournalRows(selectRecentJournalEntriesStmt.all(journalLimit))
+
+  return {
+    ok: true,
+    reason: null,
+    conversations,
+    notes,
+    journalEntries,
+  }
+}
+
+function migrateLocalMemory(payload) {
+  const conversations = Array.isArray(payload?.conversations) ? payload.conversations : []
+  const notes = Array.isArray(payload?.notes) ? payload.notes : []
+  const journalEntries = Array.isArray(payload?.journalEntries) ? payload.journalEntries : []
+
+  let insertedConversations = 0
+  let insertedNotes = 0
+  let insertedJournalEntries = 0
+
+  const migrateTxn = memoryDb.transaction(() => {
+    conversations.forEach((item) => {
+      const result = saveConversationMessage(item)
+      if (result.ok && result.reason !== 'duplicate') {
+        insertedConversations += 1
+      }
+    })
+
+    notes.forEach((item) => {
+      const result = saveNoteEntry(item)
+      if (result.ok && result.reason !== 'duplicate') {
+        insertedNotes += 1
+      }
+    })
+
+    journalEntries.forEach((item) => {
+      const result = saveJournalEntry(item)
+      if (result.ok && result.reason !== 'duplicate') {
+        insertedJournalEntries += 1
+      }
+    })
+  })
+
+  migrateTxn()
+
+  return {
+    ok: true,
+    reason: null,
+    reply: 'Memory migration completed.',
+    inserted: {
+      conversations: insertedConversations,
+      notes: insertedNotes,
+      journalEntries: insertedJournalEntries,
+    },
+  }
+}
 
 function createCpuTimesSnapshot() {
   const cpus = os.cpus() || []
@@ -976,6 +1309,104 @@ const server = createServer(async (req, res) => {
       origin,
     )
     return
+  }
+
+  if (req.method === 'GET' && req.url === '/api/memory/bootstrap') {
+    const result = loadMemoryBootstrap({
+      conversationLimit: 300,
+      notesLimit: 200,
+      journalLimit: 200,
+    })
+    sendJson(res, 200, result, origin)
+    return
+  }
+
+  if (req.method === 'POST' && req.url === '/api/memory/migrate') {
+    try {
+      const body = await parseJsonBody(req)
+      const result = migrateLocalMemory(body)
+      sendJson(res, 200, result, origin)
+      return
+    } catch (error) {
+      const reason = error?.message || 'bridge_error'
+      sendJson(
+        res,
+        400,
+        {
+          ok: false,
+          reason,
+          reply: `Memory migrate request failed (${reason}).`,
+        },
+        origin,
+      )
+      return
+    }
+  }
+
+  if (req.method === 'POST' && req.url === '/api/memory/chat') {
+    try {
+      const body = await parseJsonBody(req)
+      const result = saveConversationMessage(body)
+      sendJson(res, result.ok ? 200 : 400, result, origin)
+      return
+    } catch (error) {
+      const reason = error?.message || 'bridge_error'
+      sendJson(
+        res,
+        400,
+        {
+          ok: false,
+          reason,
+          reply: `Memory chat request failed (${reason}).`,
+        },
+        origin,
+      )
+      return
+    }
+  }
+
+  if (req.method === 'POST' && req.url === '/api/memory/note') {
+    try {
+      const body = await parseJsonBody(req)
+      const result = saveNoteEntry(body)
+      sendJson(res, result.ok ? 200 : 400, result, origin)
+      return
+    } catch (error) {
+      const reason = error?.message || 'bridge_error'
+      sendJson(
+        res,
+        400,
+        {
+          ok: false,
+          reason,
+          reply: `Memory note request failed (${reason}).`,
+        },
+        origin,
+      )
+      return
+    }
+  }
+
+  if (req.method === 'POST' && req.url === '/api/memory/journal') {
+    try {
+      const body = await parseJsonBody(req)
+      const result = saveJournalEntry(body)
+      sendJson(res, result.ok ? 200 : 400, result, origin)
+      return
+    } catch (error) {
+      const reason = error?.message || 'bridge_error'
+      sendJson(
+        res,
+        400,
+        {
+          ok: false,
+          reason,
+          reply: `Memory journal request failed (${reason}).`,
+        },
+        origin,
+      )
+      return
+    }
   }
 
   if (req.method === 'POST' && req.url === '/api/system/close') {
