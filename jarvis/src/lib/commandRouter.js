@@ -7,6 +7,7 @@ export const COMMAND_TYPES = Object.freeze({
   CLOSE_PROJECT: 'close-project',
   WEB_SUMMARIZE: 'web-summarize',
   SAVE_NOTE: 'save-note',
+  SAVE_PROFILE: 'save-profile',
   SAVE_JOURNAL: 'save-journal',
   DAILY_RECAP: 'daily-recap',
   LIST_NOTES: 'list-notes',
@@ -223,6 +224,52 @@ function extractNaturalNoteText(cleanCommand) {
         return extracted
       }
     }
+  }
+
+  return null
+}
+
+function extractProfileMemory(cleanCommand) {
+  const namedPatterns = [
+    {
+      field: 'preferredEditor',
+      label: 'preferred editor',
+      pattern: /(?:remember|set|update)\s+my\s+(?:preferred\s+editor|editor)\s+(?:is|to)\s+(.+)$/i,
+    },
+    {
+      field: 'preferredBrowser',
+      label: 'preferred browser',
+      pattern: /(?:remember|set|update)\s+my\s+(?:preferred\s+browser|browser)\s+(?:is|to)\s+(.+)$/i,
+    },
+    {
+      field: 'wakeTime',
+      label: 'wake time',
+      pattern: /(?:remember|set|update)\s+my\s+(?:wake\s*time|wake\s*up\s*time)\s+(?:is|to)\s+(.+)$/i,
+    },
+    {
+      field: 'sleepTime',
+      label: 'sleep time',
+      pattern: /(?:remember|set|update)\s+my\s+sleep\s*time\s+(?:is|to)\s+(.+)$/i,
+    },
+    {
+      field: 'name',
+      label: 'name',
+      pattern: /(?:remember|set|update)\s+my\s+name\s+(?:is|to)\s+(.+)$/i,
+    },
+  ]
+
+  for (const item of namedPatterns) {
+    const match = cleanCommand.match(item.pattern)
+    const value = cleanExtractedText(match?.[1] || '')
+    if (value) {
+      return { field: item.field, label: item.label, value }
+    }
+  }
+
+  const personalityPattern = cleanCommand.match(/(?:remember|set|update)\s+my\s+personality\s+notes?\s*[:.-]?\s*(.+)$/i)
+  const personalityValue = cleanExtractedText(personalityPattern?.[1] || '')
+  if (personalityValue) {
+    return { field: 'personalityNotes', label: 'personality notes', value: personalityValue }
   }
 
   return null
@@ -540,6 +587,18 @@ export function routeCommand(command, statusMeters) {
     }
   }
 
+  const profileMemory = extractProfileMemory(cleanCommand)
+  if (profileMemory) {
+    return {
+      reply: `Remembering your ${profileMemory.label} as ${profileMemory.value}.`,
+      action: {
+        type: COMMAND_TYPES.SAVE_PROFILE,
+        payload: profileMemory,
+      },
+      intent: COMMAND_TYPES.SAVE_PROFILE,
+    }
+  }
+
   if (normalized.startsWith('note ') || normalized.startsWith('save note')) {
     const noteText = cleanCommand.replace(/^save note\s*/i, '').replace(/^note\s*/i, '').trim()
 
@@ -608,7 +667,8 @@ export function routeCommand(command, statusMeters) {
   if (normalized === 'help' || normalized.includes('what can you do')) {
     return {
       reply:
-        'Available now: status checks, runtime diagnostics, launch/close app intents with confirmation, project open/close intents, real file search, web summarize, notes save/list, daily journal capture, and daily recap summaries.',
+        'Available now: status checks, runtime diagnostics, launch/close app intents with confirmation, project open/close intents, real file search, web summarize, notes save/list, daily journal capture, daily recap summaries, and profile memory commands. ' +
+        'You can also say remember my preferred browser is chrome to store profile memory.',
       action: null,
       intent: COMMAND_TYPES.HELP,
     }

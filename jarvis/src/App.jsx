@@ -20,6 +20,8 @@ import {
   fetchMemoryBootstrap,
   fetchSystemTelemetry,
   migrateLocalMemoryToBridge,
+  persistMemoryPreferences,
+  persistMemoryProfile,
   persistConversationMessage,
   persistJournalMessage,
   persistNoteMessage,
@@ -30,6 +32,63 @@ const CHAT_STORAGE_KEY = 'jarvis.chat.history.v1'
 const NOTES_STORAGE_KEY = 'jarvis.notes.v1'
 const JOURNAL_STORAGE_KEY = 'jarvis.journal.v1'
 const MEMORY_MIGRATED_STORAGE_KEY = 'jarvis.memory.migrated.v1'
+
+function createDefaultUserProfile() {
+  return {
+    id: 1,
+    name: 'Dawood',
+    wakeTime: '09:00',
+    sleepTime: '23:00',
+    preferredEditor: 'code',
+    preferredBrowser: 'chrome',
+    personalityNotes: '',
+    createdAt: null,
+    updatedAt: null,
+  }
+}
+
+function normalizeUserProfile(profile) {
+  if (!profile) {
+    return createDefaultUserProfile()
+  }
+
+  return {
+    id: profile.id || 1,
+    name: profile.name || 'Dawood',
+    wakeTime: profile.wakeTime || '09:00',
+    sleepTime: profile.sleepTime || '23:00',
+    preferredEditor: profile.preferredEditor || 'code',
+    preferredBrowser: profile.preferredBrowser || 'chrome',
+    personalityNotes: profile.personalityNotes || '',
+    createdAt: profile.createdAt || null,
+    updatedAt: profile.updatedAt || null,
+  }
+}
+
+function buildModelConfigFromPreferences(preferences, fallbackConfig) {
+  const nextConfig = { ...fallbackConfig }
+  if (typeof preferences?.['model.primary'] === 'string') {
+    nextConfig.primary = preferences['model.primary']
+  }
+  if (typeof preferences?.['model.fallback'] === 'string') {
+    nextConfig.fallback = preferences['model.fallback']
+  }
+  if (typeof preferences?.['model.allowCloud'] === 'string') {
+    nextConfig.allowCloud = preferences['model.allowCloud'] === 'true'
+  }
+
+  return nextConfig
+}
+
+function buildModelPreferencePayload(config) {
+  return {
+    preferences: {
+      'model.primary': config.primary,
+      'model.fallback': config.fallback,
+      'model.allowCloud': String(config.allowCloud),
+    },
+  }
+}
 
 function getDateKey(date = new Date()) {
   return date.toISOString().slice(0, 10)
@@ -251,6 +310,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [pendingAction, setPendingAction] = useState(null)
   const [modelConfig, setModelConfig] = useState(() => readModelConfig())
+  const [userProfile, setUserProfile] = useState(() => createDefaultUserProfile())
   const [bridgeHealth, setBridgeHealth] = useState({
     status: 'unknown',
     systemActionsEnabled: false,
@@ -340,6 +400,14 @@ function App() {
         window.localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(bootstrap.conversations))
       }
 
+      setUserProfile(normalizeUserProfile(bootstrap.userProfile || bootstrap.profile))
+      if (bootstrap.preferences && Object.keys(bootstrap.preferences).length > 0) {
+        const nextConfig = writeModelConfig(
+          buildModelConfigFromPreferences(bootstrap.preferences, readModelConfig()),
+        )
+        setModelConfig(nextConfig)
+      }
+
       setNotes(bootstrap.notes)
       writeStoredNotes(bootstrap.notes)
       writeStoredJournal(bootstrap.journalEntries)
@@ -351,7 +419,12 @@ function App() {
   }, [bridgeHealth.status])
 
   const handleModelConfigChange = (partialConfig) => {
-    setModelConfig((prev) => writeModelConfig({ ...prev, ...partialConfig }))
+    const nextConfig = writeModelConfig({ ...modelConfig, ...partialConfig })
+    setModelConfig(nextConfig)
+
+    if (bridgeHealth.status === 'online') {
+      void persistMemoryPreferences(buildModelPreferencePayload(nextConfig))
+    }
   }
 
   const now = new Date().toLocaleTimeString([], {
@@ -499,6 +572,29 @@ function App() {
 
     const routeResult = routeCommand(command, statusMeters)
     let replyText = routeResult.reply
+
+    if (routeResult.action?.type === COMMAND_TYPES.SAVE_PROFILE) {
+      const { field, value, label } = routeResult.action.payload
+      const nextProfile = normalizeUserProfile({
+        ...userProfile,
+        [field]: value,
+      })
+
+      setUserProfile(nextProfile)
+
+      if (bridgeHealth.status === 'online') {
+        void persistMemoryProfile(nextProfile)
+      }
+
+      replyText = `Profile updated. I remembered your ${label} as ${value}.`
+      setRecentActivity((prev) => [
+        {
+          ago: 'just now',
+          label: createActivityLabel('Profile saved: ', `${label} = ${value}`),
+        },
+        ...prev,
+      ].slice(0, 6))
+    }
 
     if (routeResult.action?.type === COMMAND_TYPES.SAVE_NOTE) {
       const existingNotes = readStoredNotes()
@@ -710,6 +806,7 @@ function App() {
               recentActivity={recentActivity}
               onSuggestionSelect={handleCommand}
               modelConfig={modelConfig}
+              userProfile={userProfile}
               bridgeHealth={bridgeHealth}
               onRefreshBridgeHealth={refreshRuntimeStatus}
               onModelConfigChange={handleModelConfigChange}

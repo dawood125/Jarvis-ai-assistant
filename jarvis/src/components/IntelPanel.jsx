@@ -5,6 +5,7 @@ function IntelPanel({
   recentActivity,
   onSuggestionSelect,
   modelConfig,
+  userProfile,
   bridgeHealth,
   onRefreshBridgeHealth,
   onModelConfigChange,
@@ -158,6 +159,40 @@ function IntelPanel({
               <span className="text-[10px] text-cyan-300">{item.stack}</span>
             </div>
           ))}
+        </div>
+      </motion.section>
+
+      <motion.section variants={itemVariants} className="glass-panel p-4">
+        <h2 className="mb-3 border-b border-slate-800 pb-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">
+          User Profile
+        </h2>
+        <div className="space-y-2 text-xs text-slate-300">
+          <div className="rounded border border-slate-800 bg-slate-900/35 p-2">
+            <span className="block text-[10px] uppercase tracking-[0.14em] text-slate-500">Name</span>
+            <span>{userProfile?.name || 'Dawood'}</span>
+          </div>
+          <div className="rounded border border-slate-800 bg-slate-900/35 p-2">
+            <span className="block text-[10px] uppercase tracking-[0.14em] text-slate-500">Preferred Editor</span>
+            <span>{userProfile?.preferredEditor || 'code'}</span>
+          </div>
+          <div className="rounded border border-slate-800 bg-slate-900/35 p-2">
+            <span className="block text-[10px] uppercase tracking-[0.14em] text-slate-500">Preferred Browser</span>
+            <span>{userProfile?.preferredBrowser || 'chrome'}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded border border-slate-800 bg-slate-900/35 p-2">
+              <span className="block text-[10px] uppercase tracking-[0.14em] text-slate-500">Wake</span>
+              <span>{userProfile?.wakeTime || '09:00'}</span>
+            </div>
+            <div className="rounded border border-slate-800 bg-slate-900/35 p-2">
+              <span className="block text-[10px] uppercase tracking-[0.14em] text-slate-500">Sleep</span>
+              <span>{userProfile?.sleepTime || '23:00'}</span>
+            </div>
+          </div>
+          <div className="rounded border border-slate-800 bg-slate-900/35 p-2">
+            <span className="block text-[10px] uppercase tracking-[0.14em] text-slate-500">Notes</span>
+            <span className="line-clamp-3 text-slate-400">{userProfile?.personalityNotes || 'No personality notes stored yet.'}</span>
+          </div>
         </div>
       </motion.section>
 

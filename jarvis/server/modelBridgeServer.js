@@ -125,6 +125,50 @@ function ensureMemoryDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_journal_tasks_entry_id
       ON journal_tasks(entry_id);
+
+    CREATE TABLE IF NOT EXISTS user_profile (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      name TEXT DEFAULT 'Dawood',
+      wake_time TEXT DEFAULT '09:00',
+      sleep_time TEXT DEFAULT '23:00',
+      preferred_editor TEXT DEFAULT 'code',
+      preferred_browser TEXT DEFAULT 'chrome',
+      personality_notes TEXT DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS preferences (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS patterns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      action TEXT NOT NULL,
+      details TEXT,
+      day_of_week INTEGER,
+      hour INTEGER,
+      frequency INTEGER DEFAULT 1,
+      last_occurred TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS app_usage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      app_name TEXT NOT NULL,
+      opened_at TEXT NOT NULL,
+      day_of_week INTEGER,
+      hour INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS reminders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message TEXT NOT NULL,
+      remind_at TEXT NOT NULL,
+      completed INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
   `)
 
   return db
@@ -172,6 +216,42 @@ const selectJournalTasksStmt = memoryDb.prepare(
 
 const journalExistsStmt = memoryDb.prepare(
   `SELECT id FROM journal_entries WHERE raw_text = ? AND created_at = ? LIMIT 1`,
+)
+
+const selectUserProfileStmt = memoryDb.prepare(
+  `SELECT id, name, wake_time, sleep_time, preferred_editor, preferred_browser, personality_notes, created_at, updated_at
+   FROM user_profile
+   WHERE id = 1
+   LIMIT 1`,
+)
+
+const upsertUserProfileStmt = memoryDb.prepare(
+  `INSERT INTO user_profile (
+      id, name, wake_time, sleep_time, preferred_editor, preferred_browser, personality_notes, created_at, updated_at
+    ) VALUES (
+      1, @name, @wake_time, @sleep_time, @preferred_editor, @preferred_browser, @personality_notes, @created_at, @updated_at
+    )
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      wake_time = excluded.wake_time,
+      sleep_time = excluded.sleep_time,
+      preferred_editor = excluded.preferred_editor,
+      preferred_browser = excluded.preferred_browser,
+      personality_notes = excluded.personality_notes,
+      updated_at = excluded.updated_at`,
+)
+
+const selectPreferencesStmt = memoryDb.prepare(
+  `SELECT key, value FROM preferences ORDER BY key ASC`,
+)
+
+const upsertPreferenceStmt = memoryDb.prepare(
+  `INSERT INTO preferences (key, value, updated_at) VALUES (@key, @value, @updated_at)
+   ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+)
+
+const selectPreferenceByKeyStmt = memoryDb.prepare(
+  `SELECT value FROM preferences WHERE key = ? LIMIT 1`,
 )
 
 function clampCount(value, min, max) {
@@ -235,6 +315,122 @@ function mapJournalRows(rows) {
       createdAt: row.created_at,
     }
   })
+}
+
+function defaultUserProfile() {
+  const now = new Date().toISOString()
+  return {
+    id: 1,
+    name: 'Dawood',
+    wakeTime: '09:00',
+    sleepTime: '23:00',
+    preferredEditor: 'code',
+    preferredBrowser: 'chrome',
+    personalityNotes: '',
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+function normalizeProfileField(value, fallback) {
+  const text = String(value ?? fallback ?? '').trim()
+  return text || String(fallback ?? '')
+}
+
+function mapUserProfileRow(row) {
+  if (!row) {
+    return defaultUserProfile()
+  }
+
+  return {
+    id: row.id,
+    name: row.name || 'Dawood',
+    wakeTime: row.wake_time || '09:00',
+    sleepTime: row.sleep_time || '23:00',
+    preferredEditor: row.preferred_editor || 'code',
+    preferredBrowser: row.preferred_browser || 'chrome',
+    personalityNotes: row.personality_notes || '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function loadUserProfile() {
+  return mapUserProfileRow(selectUserProfileStmt.get())
+}
+
+function saveUserProfile(payload = {}) {
+  const current = loadUserProfile()
+  const nextProfile = {
+    name: normalizeProfileField(payload.name, current.name),
+    wake_time: normalizeProfileField(payload.wakeTime ?? payload.wake_time, current.wakeTime),
+    sleep_time: normalizeProfileField(payload.sleepTime ?? payload.sleep_time, current.sleepTime),
+    preferred_editor: normalizeProfileField(
+      payload.preferredEditor ?? payload.preferred_editor,
+      current.preferredEditor,
+    ),
+    preferred_browser: normalizeProfileField(
+      payload.preferredBrowser ?? payload.preferred_browser,
+      current.preferredBrowser,
+    ),
+    personality_notes: normalizeProfileField(payload.personalityNotes ?? payload.personality_notes, current.personalityNotes),
+    created_at: current.createdAt || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+
+  upsertUserProfileStmt.run(nextProfile)
+
+  return {
+    ok: true,
+    reason: null,
+    reply: 'User profile stored.',
+    userProfile: loadUserProfile(),
+  }
+}
+
+function loadPreferences() {
+  const rows = selectPreferencesStmt.all()
+  const preferences = {}
+
+  rows.forEach((row) => {
+    preferences[row.key] = row.value
+  })
+
+  return preferences
+}
+
+function savePreferences(payload = {}) {
+  const items = payload?.preferences && typeof payload.preferences === 'object' ? payload.preferences : payload
+  const entries = Object.entries(items || {}).filter(([, value]) => value !== undefined && value !== null)
+
+  if (entries.length === 0) {
+    return {
+      ok: false,
+      reason: 'validation_error',
+      reply: 'No preferences provided.',
+      preferences: loadPreferences(),
+    }
+  }
+
+  const updatedAt = new Date().toISOString()
+  const saveTxn = memoryDb.transaction(() => {
+    entries.forEach(([key, value]) => {
+      upsertPreferenceStmt.run({
+        key: String(key),
+        value: String(value),
+        updated_at: updatedAt,
+      })
+    })
+  })
+
+  saveTxn()
+
+  return {
+    ok: true,
+    reason: null,
+    reply: 'Preferences stored.',
+    preferences: loadPreferences(),
+  }
 }
 
 function saveConversationMessage(payload) {
@@ -347,6 +543,8 @@ function loadMemoryBootstrap(limits = {}) {
   const conversations = mapConversationRows(selectRecentConversationsStmt.all(conversationLimit))
   const notes = mapNoteRows(selectRecentNotesStmt.all(notesLimit))
   const journalEntries = mapJournalRows(selectRecentJournalEntriesStmt.all(journalLimit))
+  const userProfile = loadUserProfile()
+  const preferences = loadPreferences()
 
   return {
     ok: true,
@@ -354,6 +552,8 @@ function loadMemoryBootstrap(limits = {}) {
     conversations,
     notes,
     journalEntries,
+    userProfile,
+    preferences,
   }
 }
 
@@ -361,6 +561,8 @@ function migrateLocalMemory(payload) {
   const conversations = Array.isArray(payload?.conversations) ? payload.conversations : []
   const notes = Array.isArray(payload?.notes) ? payload.notes : []
   const journalEntries = Array.isArray(payload?.journalEntries) ? payload.journalEntries : []
+  const userProfile = payload?.userProfile && typeof payload.userProfile === 'object' ? payload.userProfile : null
+  const preferences = payload?.preferences && typeof payload.preferences === 'object' ? payload.preferences : null
 
   let insertedConversations = 0
   let insertedNotes = 0
@@ -387,6 +589,14 @@ function migrateLocalMemory(payload) {
         insertedJournalEntries += 1
       }
     })
+
+    if (userProfile) {
+      saveUserProfile(userProfile)
+    }
+
+    if (preferences) {
+      savePreferences({ preferences })
+    }
   })
 
   migrateTxn()
@@ -1319,6 +1529,78 @@ const server = createServer(async (req, res) => {
     })
     sendJson(res, 200, result, origin)
     return
+  }
+
+  if (req.method === 'GET' && req.url === '/api/memory/profile') {
+    sendJson(
+      res,
+      200,
+      {
+        ok: true,
+        reason: null,
+        profile: loadUserProfile(),
+      },
+      origin,
+    )
+    return
+  }
+
+  if (req.method === 'POST' && req.url === '/api/memory/profile') {
+    try {
+      const body = await parseJsonBody(req)
+      const result = saveUserProfile(body)
+      sendJson(res, result.ok ? 200 : 400, result, origin)
+      return
+    } catch (error) {
+      const reason = error?.message || 'bridge_error'
+      sendJson(
+        res,
+        400,
+        {
+          ok: false,
+          reason,
+          reply: `Profile request failed (${reason}).`,
+        },
+        origin,
+      )
+      return
+    }
+  }
+
+  if (req.method === 'GET' && req.url === '/api/memory/preferences') {
+    sendJson(
+      res,
+      200,
+      {
+        ok: true,
+        reason: null,
+        preferences: loadPreferences(),
+      },
+      origin,
+    )
+    return
+  }
+
+  if (req.method === 'POST' && req.url === '/api/memory/preferences') {
+    try {
+      const body = await parseJsonBody(req)
+      const result = savePreferences(body)
+      sendJson(res, result.ok ? 200 : 400, result, origin)
+      return
+    } catch (error) {
+      const reason = error?.message || 'bridge_error'
+      sendJson(
+        res,
+        400,
+        {
+          ok: false,
+          reason,
+          reply: `Preferences request failed (${reason}).`,
+        },
+        origin,
+      )
+      return
+    }
   }
 
   if (req.method === 'POST' && req.url === '/api/memory/migrate') {

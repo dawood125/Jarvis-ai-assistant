@@ -9,6 +9,8 @@ const DEFAULT_MEMORY_MIGRATE_PATH = '/api/memory/migrate'
 const DEFAULT_MEMORY_CHAT_PATH = '/api/memory/chat'
 const DEFAULT_MEMORY_NOTE_PATH = '/api/memory/note'
 const DEFAULT_MEMORY_JOURNAL_PATH = '/api/memory/journal'
+const DEFAULT_MEMORY_PROFILE_PATH = '/api/memory/profile'
+const DEFAULT_MEMORY_PREFERENCES_PATH = '/api/memory/preferences'
 
 function resolveBridgeUrl() {
   const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
@@ -80,6 +82,24 @@ function resolveMemoryJournalUrl() {
   }
 
   return `${baseUrl.replace(/\/$/, '')}${DEFAULT_MEMORY_JOURNAL_PATH}`
+}
+
+function resolveMemoryProfileUrl() {
+  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  if (!baseUrl) {
+    return DEFAULT_MEMORY_PROFILE_PATH
+  }
+
+  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_MEMORY_PROFILE_PATH}`
+}
+
+function resolveMemoryPreferencesUrl() {
+  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  if (!baseUrl) {
+    return DEFAULT_MEMORY_PREFERENCES_PATH
+  }
+
+  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_MEMORY_PREFERENCES_PATH}`
 }
 
 export async function fetchBridgeHealth() {
@@ -175,6 +195,8 @@ export async function fetchMemoryBootstrap() {
         conversations: [],
         notes: [],
         journalEntries: [],
+        userProfile: null,
+        preferences: {},
       }
     }
 
@@ -185,6 +207,8 @@ export async function fetchMemoryBootstrap() {
       conversations: Array.isArray(payload?.conversations) ? payload.conversations : [],
       notes: Array.isArray(payload?.notes) ? payload.notes : [],
       journalEntries: Array.isArray(payload?.journalEntries) ? payload.journalEntries : [],
+      userProfile: payload?.userProfile || payload?.profile || null,
+      preferences: payload?.preferences && typeof payload.preferences === 'object' ? payload.preferences : {},
     }
   } catch {
     return {
@@ -193,6 +217,8 @@ export async function fetchMemoryBootstrap() {
       conversations: [],
       notes: [],
       journalEntries: [],
+      userProfile: null,
+      preferences: {},
     }
   }
 }
@@ -269,6 +295,108 @@ export async function persistJournalMessage(payload) {
     })
   } catch {
     // Keep local UX non-blocking if bridge memory is unavailable.
+  }
+}
+
+export async function fetchMemoryProfile() {
+  try {
+    const response = await fetch(resolveMemoryProfileUrl())
+    if (!response.ok) {
+      return {
+        ok: false,
+        reason: `bridge_http_${response.status}`,
+        profile: null,
+      }
+    }
+
+    const payload = await response.json()
+    return {
+      ok: Boolean(payload?.ok),
+      reason: payload?.reason || null,
+      profile: payload?.profile || null,
+    }
+  } catch {
+    return {
+      ok: false,
+      reason: 'bridge_unreachable',
+      profile: null,
+    }
+  }
+}
+
+export async function persistMemoryProfile(payload) {
+  try {
+    const response = await fetch(resolveMemoryProfileUrl(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload || {}),
+    })
+
+    const body = await response.json()
+    return {
+      ok: Boolean(body?.ok && response.ok),
+      reason: body?.reason || null,
+      profile: body?.profile || null,
+    }
+  } catch {
+    return {
+      ok: false,
+      reason: 'bridge_unreachable',
+      profile: null,
+    }
+  }
+}
+
+export async function fetchMemoryPreferences() {
+  try {
+    const response = await fetch(resolveMemoryPreferencesUrl())
+    if (!response.ok) {
+      return {
+        ok: false,
+        reason: `bridge_http_${response.status}`,
+        preferences: {},
+      }
+    }
+
+    const payload = await response.json()
+    return {
+      ok: Boolean(payload?.ok),
+      reason: payload?.reason || null,
+      preferences: payload?.preferences && typeof payload.preferences === 'object' ? payload.preferences : {},
+    }
+  } catch {
+    return {
+      ok: false,
+      reason: 'bridge_unreachable',
+      preferences: {},
+    }
+  }
+}
+
+export async function persistMemoryPreferences(payload) {
+  try {
+    const response = await fetch(resolveMemoryPreferencesUrl(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload || {}),
+    })
+
+    const body = await response.json()
+    return {
+      ok: Boolean(body?.ok && response.ok),
+      reason: body?.reason || null,
+      preferences: body?.preferences && typeof body.preferences === 'object' ? body.preferences : {},
+    }
+  } catch {
+    return {
+      ok: false,
+      reason: 'bridge_unreachable',
+      preferences: {},
+    }
   }
 }
 
