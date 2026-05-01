@@ -14,93 +14,72 @@ const DEFAULT_MEMORY_PREFERENCES_PATH = '/api/memory/preferences'
 
 function resolveBridgeUrl() {
   const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
-  if (!baseUrl) {
-    return DEFAULT_BRIDGE_PATH
-  }
-
-  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_BRIDGE_PATH}`
+  const host = baseUrl || 'http://127.0.0.1:8788'
+  return `${host.replace(/\/$/, '')}${DEFAULT_BRIDGE_PATH}`
 }
 
 function resolveBridgeHealthUrl() {
   const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
-  if (!baseUrl) {
-    return DEFAULT_BRIDGE_HEALTH_PATH
-  }
-
-  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_BRIDGE_HEALTH_PATH}`
+  const host = baseUrl || 'http://127.0.0.1:8788'
+  return `${host.replace(/\/$/, '')}${DEFAULT_BRIDGE_HEALTH_PATH}`
 }
 
 function resolveSystemStatusUrl() {
   const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
-  if (!baseUrl) {
-    return DEFAULT_SYSTEM_STATUS_PATH
-  }
-
-  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_SYSTEM_STATUS_PATH}`
+  const host = baseUrl || 'http://127.0.0.1:8788'
+  return `${host.replace(/\/$/, '')}${DEFAULT_SYSTEM_STATUS_PATH}`
 }
 
 function resolveMemoryBootstrapUrl() {
   const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
-  if (!baseUrl) {
-    return DEFAULT_MEMORY_BOOTSTRAP_PATH
-  }
-
-  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_MEMORY_BOOTSTRAP_PATH}`
+  const host = baseUrl || 'http://127.0.0.1:8788'
+  return `${host.replace(/\/$/, '')}${DEFAULT_MEMORY_BOOTSTRAP_PATH}`
 }
 
 function resolveMemoryMigrateUrl() {
   const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
-  if (!baseUrl) {
-    return DEFAULT_MEMORY_MIGRATE_PATH
-  }
-
-  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_MEMORY_MIGRATE_PATH}`
+  const host = baseUrl || 'http://127.0.0.1:8788'
+  return `${host.replace(/\/$/, '')}${DEFAULT_MEMORY_MIGRATE_PATH}`
 }
 
 function resolveMemoryChatUrl() {
   const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
-  if (!baseUrl) {
-    return DEFAULT_MEMORY_CHAT_PATH
-  }
-
-  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_MEMORY_CHAT_PATH}`
+  const host = baseUrl || 'http://127.0.0.1:8788'
+  return `${host.replace(/\/$/, '')}${DEFAULT_MEMORY_CHAT_PATH}`
 }
 
 function resolveMemoryNoteUrl() {
   const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
-  if (!baseUrl) {
-    return DEFAULT_MEMORY_NOTE_PATH
-  }
-
-  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_MEMORY_NOTE_PATH}`
+  const host = baseUrl || 'http://127.0.0.1:8788'
+  return `${host.replace(/\/$/, '')}${DEFAULT_MEMORY_NOTE_PATH}`
 }
 
 function resolveMemoryJournalUrl() {
   const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
-  if (!baseUrl) {
-    return DEFAULT_MEMORY_JOURNAL_PATH
-  }
-
-  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_MEMORY_JOURNAL_PATH}`
+  const host = baseUrl || 'http://127.0.0.1:8788'
+  return `${host.replace(/\/$/, '')}${DEFAULT_MEMORY_JOURNAL_PATH}`
 }
 
 function resolveMemoryProfileUrl() {
   const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
-  if (!baseUrl) {
-    return DEFAULT_MEMORY_PROFILE_PATH
-  }
-
-  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_MEMORY_PROFILE_PATH}`
+  const host = baseUrl || 'http://127.0.0.1:8788'
+  return `${host.replace(/\/$/, '')}${DEFAULT_MEMORY_PROFILE_PATH}`
 }
 
 function resolveMemoryPreferencesUrl() {
   const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
-  if (!baseUrl) {
-    return DEFAULT_MEMORY_PREFERENCES_PATH
-  }
-
-  return `${baseUrl.replace(/\/$/, '')}${DEFAULT_MEMORY_PREFERENCES_PATH}`
+  const host = baseUrl || 'http://127.0.0.1:8788'
+  return `${host.replace(/\/$/, '')}${DEFAULT_MEMORY_PREFERENCES_PATH}`
 }
+
+function resolveBridgeWebSocketUrl() {
+  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  const host = baseUrl || 'http://127.0.0.1:8788'
+  // switch http:// -> ws:// and https:// -> wss://
+  return `${host.replace(/\/$/, '').replace(/^http/, 'ws')}/ws`
+}
+
+export { resolveBridgeWebSocketUrl }
 
 export async function fetchBridgeHealth() {
   try {

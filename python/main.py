@@ -3,12 +3,29 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from . import memory, brain
 
 load_dotenv()
 
 app = FastAPI(title="Jarvis Python Agent")
+
+# Allow the frontend dev server to call this backend during development
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_HTML = WORKSPACE_ROOT / "jarvis" / "index.html"
@@ -81,6 +98,20 @@ async def post_note(request: Request):
 async def post_journal(request: Request):
     payload = await request.json()
     return JSONResponse(memory.save_journal_entry(payload))
+
+
+@app.post("/api/model/reply")
+async def model_reply(request: Request):
+    payload = await request.json()
+    command = None
+    # support both { command } and { provider, command }
+    if isinstance(payload, dict):
+        command = payload.get("command") or payload.get("text") or ''
+    else:
+        command = ''
+
+    reply = await brain.handle_message(str(command))
+    return JSONResponse({"ok": True, "reply": reply})
 
 
 @app.websocket("/ws")
