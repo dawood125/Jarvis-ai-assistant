@@ -25,8 +25,9 @@ function resolveBridgeHealthUrl() {
 }
 
 function resolveSystemStatusUrl() {
+  const systemUrl = (import.meta.env.VITE_SYSTEM_BRIDGE_URL || '').trim()
   const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
-  const host = baseUrl || 'http://127.0.0.1:8788'
+  const host = systemUrl || baseUrl || 'http://127.0.0.1:8788'
   return `${host.replace(/\/$/, '')}${DEFAULT_SYSTEM_STATUS_PATH}`
 }
 

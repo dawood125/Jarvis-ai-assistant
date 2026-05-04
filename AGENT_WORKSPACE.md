@@ -40,6 +40,44 @@ Notes & cautions:
 - `SYSTEM_ACTIONS_ENABLED` defaults to `false`; enable with `.env` only after you confirm allowlist settings.
 - The validated runtime for this workspace is the repo virtualenv at `.venv`.
 
+---
+
+Date: 2026-05-04
+
+Milestone: Chunk 1 UI overhaul (tabs + typography)
+
+Summary:
+- Right rail is now tabbed (Actions, Memory, Activity, Dev) to reduce visual clutter.
+- Notes moved into the Memory tab; left rail simplified to core + vitals.
+- Added display typography (Rajdhani + Space Grotesk) and new tab/badge styling.
+- Added panel focus logic so commands can switch tabs automatically.
+- Added `VITE_SYSTEM_BRIDGE_URL` so Python can be primary while Node handles system actions.
+
+Files updated:
+- `jarvis/src/components/IntelPanel.jsx`
+- `jarvis/src/components/LeftRail.jsx`
+- `jarvis/src/App.jsx`
+- `jarvis/src/index.css`
+- `jarvis/src/lib/commandActions.js`
+- `jarvis/.env`
+- `jarvis/.env.example`
+
+Verification:
+- Ran `npm run build` (frontend build) to validate UI changes.
+
+Patch: System status + CORS preflight fix
+
+Summary:
+- System telemetry now reads `VITE_SYSTEM_BRIDGE_URL` when set (avoids hitting Python for `/api/system/status`).
+- Added explicit OPTIONS handler for `/api/model/reply` to silence preflight 400s.
+
+Files updated:
+- `jarvis/src/lib/modelClients.js`
+- `python/main.py`
+
+Verification:
+- Ran `npm run build` after change.
+
 References:
 - Plan details: `Plan/SecondPlan.md`
 - Session plan: `/memories/session/plan.md`

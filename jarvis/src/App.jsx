@@ -32,6 +32,12 @@ const CHAT_STORAGE_KEY = 'jarvis.chat.history.v1'
 const NOTES_STORAGE_KEY = 'jarvis.notes.v1'
 const JOURNAL_STORAGE_KEY = 'jarvis.journal.v1'
 const MEMORY_MIGRATED_STORAGE_KEY = 'jarvis.memory.migrated.v1'
+const PANEL_TABS = Object.freeze({
+  ACTIONS: 'actions',
+  MEMORY: 'memory',
+  ACTIVITY: 'activity',
+  DEV: 'dev',
+})
 
 function createDefaultUserProfile() {
   return {
@@ -88,6 +94,52 @@ function buildModelPreferencePayload(config) {
       'model.allowCloud': String(config.allowCloud),
     },
   }
+}
+
+function resolvePanelFocus(command, routeResult) {
+  const normalized = String(command || '').toLowerCase()
+  const actionType = routeResult?.action?.type
+
+  if (
+    actionType === COMMAND_TYPES.SAVE_PROFILE ||
+    actionType === COMMAND_TYPES.SAVE_NOTE ||
+    actionType === COMMAND_TYPES.LIST_NOTES
+  ) {
+    return PANEL_TABS.MEMORY
+  }
+
+  if (actionType === COMMAND_TYPES.SAVE_JOURNAL || actionType === COMMAND_TYPES.DAILY_RECAP) {
+    return PANEL_TABS.ACTIVITY
+  }
+
+  if (actionType === COMMAND_TYPES.RUNTIME_DIAGNOSTIC) {
+    return PANEL_TABS.DEV
+  }
+
+  if (
+    actionType === COMMAND_TYPES.LAUNCH_APP ||
+    actionType === COMMAND_TYPES.CLOSE_APP ||
+    actionType === COMMAND_TYPES.OPEN_PROJECT ||
+    actionType === COMMAND_TYPES.CLOSE_PROJECT ||
+    actionType === COMMAND_TYPES.FILE_SEARCH ||
+    actionType === COMMAND_TYPES.WEB_SUMMARIZE
+  ) {
+    return PANEL_TABS.ACTIONS
+  }
+
+  if (normalized.includes('profile') || normalized.includes('memory') || normalized.startsWith('note')) {
+    return PANEL_TABS.MEMORY
+  }
+
+  if (normalized.includes('journal') || normalized.includes('recap') || normalized.includes('activity')) {
+    return PANEL_TABS.ACTIVITY
+  }
+
+  if (normalized.includes('diagnose') || normalized.includes('diagnostic')) {
+    return PANEL_TABS.DEV
+  }
+
+  return null
 }
 
 function getDateKey(date = new Date()) {
@@ -311,6 +363,7 @@ function App() {
   const [pendingAction, setPendingAction] = useState(null)
   const [modelConfig, setModelConfig] = useState(() => readModelConfig())
   const [userProfile, setUserProfile] = useState(() => createDefaultUserProfile())
+  const [panelFocus, setPanelFocus] = useState(PANEL_TABS.ACTIONS)
   const [bridgeHealth, setBridgeHealth] = useState({
     status: 'unknown',
     systemActionsEnabled: false,
@@ -571,6 +624,10 @@ function App() {
     }
 
     const routeResult = routeCommand(command, statusMeters)
+    const nextPanelFocus = resolvePanelFocus(command, routeResult)
+    if (nextPanelFocus) {
+      setPanelFocus(nextPanelFocus)
+    }
     let replyText = routeResult.reply
 
     if (routeResult.action?.type === COMMAND_TYPES.SAVE_PROFILE) {
@@ -793,7 +850,7 @@ function App() {
           <TopBar now={now} dateText={dateText} bridgeHealth={bridgeHealth} telemetryStatus={telemetry.status} />
 
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-4 lg:overflow-hidden">
-            <LeftRail statusMeters={statusMeters} notes={notes} />
+            <LeftRail statusMeters={statusMeters} />
             <div className="min-h-115 lg:col-span-2 lg:min-h-0">
               <ChatStage
                 messages={messages}
@@ -810,6 +867,9 @@ function App() {
               bridgeHealth={bridgeHealth}
               onRefreshBridgeHealth={refreshRuntimeStatus}
               onModelConfigChange={handleModelConfigChange}
+              notes={notes}
+              focusSection={panelFocus}
+              onFocusChange={setPanelFocus}
             />
           </div>
         </div>

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -112,6 +112,11 @@ async def model_reply(request: Request):
 
     reply = await brain.handle_message(str(command))
     return JSONResponse({"ok": True, "reply": reply})
+
+
+@app.options("/api/model/reply")
+async def model_reply_options():
+    return Response(status_code=200)
 
 
 @app.websocket("/ws")

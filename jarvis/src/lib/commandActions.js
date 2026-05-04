@@ -6,8 +6,17 @@ const DEFAULT_SYSTEM_PROJECT_CLOSE_PATH = '/api/system/project/close'
 const DEFAULT_SYSTEM_FILE_SEARCH_PATH = '/api/system/file-search'
 const DEFAULT_WEB_SUMMARY_PATH = '/api/web/summarize'
 
+function resolveSystemBaseUrl() {
+  const systemUrl = (import.meta.env.VITE_SYSTEM_BRIDGE_URL || '').trim()
+  if (systemUrl) {
+    return systemUrl
+  }
+
+  return (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+}
+
 function resolveSystemLaunchUrl() {
-  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  const baseUrl = resolveSystemBaseUrl()
   if (!baseUrl) {
     return DEFAULT_SYSTEM_LAUNCH_PATH
   }
@@ -16,7 +25,7 @@ function resolveSystemLaunchUrl() {
 }
 
 function resolveSystemCloseUrl() {
-  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  const baseUrl = resolveSystemBaseUrl()
   if (!baseUrl) {
     return DEFAULT_SYSTEM_CLOSE_PATH
   }
@@ -25,7 +34,7 @@ function resolveSystemCloseUrl() {
 }
 
 function resolveProjectOpenUrl() {
-  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  const baseUrl = resolveSystemBaseUrl()
   if (!baseUrl) {
     return DEFAULT_SYSTEM_PROJECT_OPEN_PATH
   }
@@ -34,7 +43,7 @@ function resolveProjectOpenUrl() {
 }
 
 function resolveProjectCloseUrl() {
-  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  const baseUrl = resolveSystemBaseUrl()
   if (!baseUrl) {
     return DEFAULT_SYSTEM_PROJECT_CLOSE_PATH
   }
@@ -43,7 +52,7 @@ function resolveProjectCloseUrl() {
 }
 
 function resolveSystemFileSearchUrl() {
-  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  const baseUrl = resolveSystemBaseUrl()
   if (!baseUrl) {
     return DEFAULT_SYSTEM_FILE_SEARCH_PATH
   }
@@ -52,7 +61,7 @@ function resolveSystemFileSearchUrl() {
 }
 
 function resolveWebSummaryUrl() {
-  const baseUrl = (import.meta.env.VITE_MODEL_BRIDGE_URL || '').trim()
+  const baseUrl = resolveSystemBaseUrl()
   if (!baseUrl) {
     return DEFAULT_WEB_SUMMARY_PATH
   }
