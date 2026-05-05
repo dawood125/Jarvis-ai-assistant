@@ -490,102 +490,9 @@ export function routeCommand(command, statusMeters) {
     }
   }
 
-  const projectName = extractProjectName(cleanCommand)
-  if (projectName) {
-    const resolvedProject = resolveProjectTarget(projectName)
-
-    return {
-      reply: resolvedProject
-        ? `Project launch intent captured for ${resolvedProject.label}. Preparing a safe execution preview.`
-        : `Project launch intent captured for ${projectName}. Add project mapping in bridge env to enable execution.`,
-      action: {
-        type: COMMAND_TYPES.OPEN_PROJECT,
-        payload: {
-          projectName,
-          resolvedProject,
-        },
-        requiresConfirmation: true,
-        executionMode: 'preview-only',
-      },
-      intent: COMMAND_TYPES.OPEN_PROJECT,
-    }
-  }
-
-  const closeProjectName = extractCloseProjectName(cleanCommand)
-  if (closeProjectName) {
-    const resolvedProject = resolveProjectTarget(closeProjectName)
-
-    return {
-      reply: resolvedProject
-        ? `Project close intent captured for ${resolvedProject.label}. Preparing a safe execution preview.`
-        : `Project close intent captured for ${closeProjectName}. Add project mapping in bridge env to enable execution.`,
-      action: {
-        type: COMMAND_TYPES.CLOSE_PROJECT,
-        payload: {
-          projectName: closeProjectName,
-          resolvedProject,
-        },
-        requiresConfirmation: true,
-        executionMode: 'preview-only',
-      },
-      intent: COMMAND_TYPES.CLOSE_PROJECT,
-    }
-  }
-
-  const webSummaryRequest = extractWebSummaryRequest(cleanCommand, normalized)
-  if (webSummaryRequest) {
-    return {
-      reply: 'Web summary request accepted. Fetching and condensing information now...',
-      action: {
-        type: COMMAND_TYPES.WEB_SUMMARIZE,
-        payload: webSummaryRequest,
-      },
-      intent: COMMAND_TYPES.WEB_SUMMARIZE,
-    }
-  }
-
-  const launchTarget = extractLaunchTarget(cleanCommand, normalized)
-  if (launchTarget) {
-    const target = launchTarget
-    const resolvedTarget = resolveAppTarget(target)
-
-    return {
-      reply: resolvedTarget
-        ? `Launch intent captured for ${resolvedTarget.label}. Preparing a safe execution preview.`
-        : `Launch intent captured for ${target || 'target app'}. Running live system actions is currently locked behind confirmation mode.`,
-      action: {
-        type: COMMAND_TYPES.LAUNCH_APP,
-        payload: {
-          target: target || 'target app',
-          resolvedTarget,
-        },
-        requiresConfirmation: true,
-        executionMode: 'preview-only',
-      },
-      intent: COMMAND_TYPES.LAUNCH_APP,
-    }
-  }
-
-  const closeTarget = extractCloseTarget(cleanCommand, normalized)
-  if (closeTarget) {
-    const resolvedTarget = resolveAppTarget(closeTarget)
-
-    return {
-      reply: resolvedTarget
-        ? `Close intent captured for ${resolvedTarget.label}. Preparing a safe execution preview.`
-        : `Close intent captured for ${closeTarget || 'target app'}. Use names like VS Code, terminal, Chrome, or Spotify.`,
-      action: {
-        type: COMMAND_TYPES.CLOSE_APP,
-        payload: {
-          target: closeTarget || 'target app',
-          resolvedTarget,
-        },
-        requiresConfirmation: true,
-        executionMode: 'preview-only',
-      },
-      intent: COMMAND_TYPES.CLOSE_APP,
-    }
-  }
+  // System actions (LAUNCH_APP, CLOSE_APP, OPEN_PROJECT, CLOSE_PROJECT, WEB_SUMMARIZE)
+  // are now handled exclusively by the Python Agentic Loop via WebSocket.
+  // We no longer intercept them here.
 
   const profileMemory = extractProfileMemory(cleanCommand)
   if (profileMemory) {
@@ -642,27 +549,7 @@ export function routeCommand(command, statusMeters) {
     }
   }
 
-  if (normalized.includes('search') || normalized.startsWith('find ') || normalized.startsWith('lookup ')) {
-    const query = cleanCommand
-      .replace(/^search\s*/i, '')
-      .replace(/^find\s*/i, '')
-      .replace(/^lookup\s*/i, '')
-      .replace(/^files?\s*/i, '')
-      .replace(/^for\s*/i, '')
-      .trim()
-
-    return {
-      reply: 'Search request accepted. Scanning local indexed context now.',
-      action: {
-        type: COMMAND_TYPES.FILE_SEARCH,
-        payload: {
-          query: query || 'all',
-        },
-        executionMode: 'local-index',
-      },
-      intent: COMMAND_TYPES.FILE_SEARCH,
-    }
-  }
+  // File search is now handled by Python Agent.
 
   if (normalized === 'help' || normalized.includes('what can you do')) {
     return {

@@ -154,7 +154,7 @@ async def _handle_with_groq(message: str) -> str:
                     parsed_arguments = json.loads(raw_arguments)
                 except Exception:
                     parsed_arguments = {}
-                tool_result = _execute_tool(tool_call.function.name, parsed_arguments)
+                tool_result = await asyncio.to_thread(_execute_tool, tool_call.function.name, parsed_arguments)
                 messages.append(
                     {
                         "role": "tool",

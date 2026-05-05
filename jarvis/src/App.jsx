@@ -25,6 +25,7 @@ import {
   persistConversationMessage,
   persistJournalMessage,
   persistNoteMessage,
+  resolveBridgeWebSocketUrl,
 } from './lib/modelClients'
 import { readModelConfig, resolveModelReply, writeModelConfig } from './lib/modelRouter'
 
@@ -376,6 +377,37 @@ function App() {
   const [telemetry, setTelemetry] = useState(() => createEmptyTelemetryState())
   const responseTimerRef = useRef(null)
   const memorySyncRef = useRef(false)
+  const wsRef = useRef(null)
+
+  useEffect(() => {
+    const wsUrl = resolveBridgeWebSocketUrl()
+    const ws = new WebSocket(wsUrl)
+    
+    ws.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data)
+        if (payload.type === 'reply') {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: 'jarvis',
+              label: 'JARVIS CORE',
+              text: payload.text,
+              createdAt: new Date().toISOString(),
+            },
+          ])
+          setIsProcessing(false)
+        }
+      } catch {
+        // ignore
+      }
+    }
+    
+    wsRef.current = ws
+    return () => {
+      ws.close()
+    }
+  }, [])
 
   const statusMeters = [
     {
@@ -541,85 +573,9 @@ function App() {
 
     setIsProcessing(true)
 
-    if (pendingAction && (normalized === 'confirm' || normalized === 'yes' || normalized === 'yes confirm')) {
-      let replyText = 'Pending action confirmed.'
-
-      if (pendingAction.type === COMMAND_TYPES.LAUNCH_APP) {
-        executeConfirmedLaunchAppAction(pendingAction, {
-          bridgeHealth,
-        })
-          .then((launchResult) => {
-            setRecentActivity((prev) => [launchResult.activityEntry, ...prev].slice(0, 6))
-            queueJarvisReply(launchResult.reply)
-          })
-          .catch(() => {
-            queueJarvisReply('Launch confirmation failed due to an unexpected adapter error.')
-          })
-
-        setPendingAction(null)
-        return
-      }
-
-      if (pendingAction.type === COMMAND_TYPES.CLOSE_APP) {
-        executeConfirmedCloseAppAction(pendingAction, {
-          bridgeHealth,
-        })
-          .then((closeResult) => {
-            setRecentActivity((prev) => [closeResult.activityEntry, ...prev].slice(0, 6))
-            queueJarvisReply(closeResult.reply)
-          })
-          .catch(() => {
-            queueJarvisReply('Close confirmation failed due to an unexpected adapter error.')
-          })
-
-        setPendingAction(null)
-        return
-      }
-
-      if (pendingAction.type === COMMAND_TYPES.OPEN_PROJECT) {
-        executeConfirmedOpenProjectAction(pendingAction, {
-          bridgeHealth,
-        })
-          .then((projectResult) => {
-            setRecentActivity((prev) => [projectResult.activityEntry, ...prev].slice(0, 6))
-            queueJarvisReply(projectResult.reply)
-          })
-          .catch(() => {
-            queueJarvisReply('Project launch confirmation failed due to an unexpected adapter error.')
-          })
-
-        setPendingAction(null)
-        return
-      }
-
-      if (pendingAction.type === COMMAND_TYPES.CLOSE_PROJECT) {
-        executeConfirmedCloseProjectAction(pendingAction, {
-          bridgeHealth,
-        })
-          .then((projectResult) => {
-            setRecentActivity((prev) => [projectResult.activityEntry, ...prev].slice(0, 6))
-            queueJarvisReply(projectResult.reply)
-          })
-          .catch(() => {
-            queueJarvisReply('Project close confirmation failed due to an unexpected adapter error.')
-          })
-
-        setPendingAction(null)
-        return
-      }
-
-      setPendingAction(null)
-
-      queueJarvisReply(replyText)
-
-      return
-    }
-
     if (pendingAction && (normalized === 'cancel' || normalized === 'abort')) {
       setPendingAction(null)
-
       queueJarvisReply('Pending action canceled. No system workflow was executed.')
-
       return
     }
 
@@ -731,41 +687,51 @@ function App() {
     }
 
     if (routeResult.action?.type === COMMAND_TYPES.LAUNCH_APP) {
-      if (routeResult.action.requiresConfirmation) {
-        setPendingAction(routeResult.action)
-        const target = routeResult.action.payload?.resolvedTarget?.label || routeResult.action.payload?.target || 'target app'
-        replyText = `Launch action staged for ${target}. Reply with confirm to proceed or cancel to abort.`
-      } else {
-        const launchResult = executeLaunchAppAction(routeResult.action)
-        replyText = launchResult.reply
-        setRecentActivity((prev) => [launchResult.activityEntry, ...prev].slice(0, 6))
-      }
+      executeConfirmedLaunchAppAction(routeResult.action, { bridgeHealth })
+        .then((launchResult) => {
+          setRecentActivity((prev) => [launchResult.activityEntry, ...prev].slice(0, 6))
+          queueJarvisReply(launchResult.reply)
+        })
+        .catch(() => {
+          queueJarvisReply('Launch failed due to an unexpected adapter error.')
+        })
+      return
     }
 
     if (routeResult.action?.type === COMMAND_TYPES.CLOSE_APP) {
-      if (routeResult.action.requiresConfirmation) {
-        setPendingAction(routeResult.action)
-        const target = routeResult.action.payload?.resolvedTarget?.label || routeResult.action.payload?.target || 'target app'
-        replyText = `Close action staged for ${target}. Reply with confirm to proceed or cancel to abort.`
-      }
+      executeConfirmedCloseAppAction(routeResult.action, { bridgeHealth })
+        .then((closeResult) => {
+          setRecentActivity((prev) => [closeResult.activityEntry, ...prev].slice(0, 6))
+          queueJarvisReply(closeResult.reply)
+        })
+        .catch(() => {
+          queueJarvisReply('Close failed due to an unexpected adapter error.')
+        })
+      return
     }
 
     if (routeResult.action?.type === COMMAND_TYPES.OPEN_PROJECT) {
-      if (routeResult.action.requiresConfirmation) {
-        setPendingAction(routeResult.action)
-        const project =
-          routeResult.action.payload?.resolvedProject?.label || routeResult.action.payload?.projectName || 'project'
-        replyText = `Project launch staged for ${project}. Reply with confirm to proceed or cancel to abort.`
-      }
+      executeConfirmedOpenProjectAction(routeResult.action, { bridgeHealth })
+        .then((projectResult) => {
+          setRecentActivity((prev) => [projectResult.activityEntry, ...prev].slice(0, 6))
+          queueJarvisReply(projectResult.reply)
+        })
+        .catch(() => {
+          queueJarvisReply('Project launch failed due to an unexpected adapter error.')
+        })
+      return
     }
 
     if (routeResult.action?.type === COMMAND_TYPES.CLOSE_PROJECT) {
-      if (routeResult.action.requiresConfirmation) {
-        setPendingAction(routeResult.action)
-        const project =
-          routeResult.action.payload?.resolvedProject?.label || routeResult.action.payload?.projectName || 'project'
-        replyText = `Project close staged for ${project}. Reply with confirm to proceed or cancel to abort.`
-      }
+      executeConfirmedCloseProjectAction(routeResult.action, { bridgeHealth })
+        .then((projectResult) => {
+          setRecentActivity((prev) => [projectResult.activityEntry, ...prev].slice(0, 6))
+          queueJarvisReply(projectResult.reply)
+        })
+        .catch(() => {
+          queueJarvisReply('Project close failed due to an unexpected adapter error.')
+        })
+      return
     }
 
     if (routeResult.action?.type === COMMAND_TYPES.FILE_SEARCH) {
@@ -817,6 +783,19 @@ function App() {
     }
 
     if (routeResult.intent === COMMAND_TYPES.UNKNOWN) {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'message', text: command }))
+        setRecentActivity((prev) => [
+          {
+            ago: 'just now',
+            label: 'Sent via WebSocket',
+          },
+          ...prev,
+        ].slice(0, 6))
+        return
+      }
+
+      // fallback
       resolveModelReply(command, modelConfig)
         .then((modelReply) => {
           setRecentActivity((prev) => [

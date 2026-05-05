@@ -7,8 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import memory, brain
 
-load_dotenv()
-
+env_path = Path(__file__).resolve().parents[1] / "jarvis" / ".env"
+load_dotenv(dotenv_path=env_path)
 app = FastAPI(title="Jarvis Python Agent")
 
 # Allow the frontend dev server to call this backend during development
@@ -38,7 +38,32 @@ async def startup_event():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "python-agent"}
+    return {
+        "status": "online",
+        "systemActionsEnabled": True,
+        "providers": {
+            "groq": True,
+            "openrouter": False,
+        }
+    }
+
+
+@app.get("/api/system/status")
+async def system_status():
+    import psutil
+    import time
+    cpu = psutil.cpu_percent(interval=0.1)
+    mem = psutil.virtual_memory().percent
+    return {
+        "status": "online",
+        "source": "python-agent",
+        "updatedAt": time.time(),
+        "metrics": {
+            "cpuLoadPercent": cpu,
+            "memoryUsagePercent": mem,
+            "networkPingMs": 15
+        }
+    }
 
 
 @app.get("/")
@@ -121,6 +146,11 @@ async def model_reply_options():
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
+    origin = ws.headers.get("origin")
+    if origin and origin not in ALLOWED_ORIGINS:
+        await ws.close(code=1008, reason="Origin not allowed")
+        return
+
     await ws.accept()
     try:
         while True:

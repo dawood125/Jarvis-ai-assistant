@@ -5,8 +5,6 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "bridge": "node -r dotenv/config server/modelBridgeServer.js",
-    "dev:bridge": "node -r dotenv/config server/modelBridgeServer.js",
     "dev:client": "vite",
     "build": "vite build",
     "lint": "eslint .",

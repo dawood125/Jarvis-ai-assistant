@@ -82,4 +82,36 @@ References:
 - Plan details: `Plan/SecondPlan.md`
 - Session plan: `/memories/session/plan.md`
 
-If you want, I can now implement the full Groq function-calling loop in `python/brain.py` (requires `GROQ_API_KEY`), or continue by adding fully-implemented memory wrappers and unit smoke tests. Which should I do next?
+---
+
+Date: 2026-05-05
+
+Milestone: Chunk 2 Security, Usability, & WebSockets
+
+Summary:
+- Removed legacy Node.js bridge (`modelBridgeServer.js`) and NPM scripts.
+- Fixed command injection vulnerability in `python/tools.py` (`shell=False` & tokenization).
+- Implemented real web scraping in `search_web` using `requests` and `BeautifulSoup`.
+- Wrapped blocking tool execution in `asyncio.to_thread` in `brain.py`.
+- Added origin verification to `/ws` in `main.py`.
+- Implemented `/api/system/status` in Python using `psutil` so frontend telemetry registers "Bridge: online" & "Telemetry: live".
+- Rewired frontend primary chat communication to WebSocket `/ws`.
+- Removed confirmation step ("confirm") for executing applications to reduce user friction.
+- Fixed `e.preventDefault()` issue on chat input causing page reloads on Enter.
+
+Files updated:
+- `python/main.py`
+- `python/brain.py`
+- `python/tools.py`
+- `python/requirements.txt`
+- `jarvis/src/App.jsx`
+- `jarvis/src/components/ChatStage.jsx`
+- `jarvis/src/lib/commandRouter.js`
+- `jarvis/package.json`
+- `jarvis/.env`
+
+Verification:
+- Manual browser subagent verification of React UI status.
+- Smoke tested backend and dependency installation.
+
+Next up: Chunk 3 - Learning Layer (app usage tracking and pattern generation).

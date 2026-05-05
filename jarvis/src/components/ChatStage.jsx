@@ -96,6 +96,12 @@ function ChatStage({ messages, onSubmitCommand, isProcessing }) {
         <input
           value={commandText}
           onChange={(event) => setCommandText(event.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              handleSubmit(e)
+            }
+          }}
           className="chat-input w-full rounded-lg px-4 py-3 text-sm"
           placeholder="Enter command or speak to JARVIS..."
           type="text"
