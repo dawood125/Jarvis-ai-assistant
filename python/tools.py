@@ -20,20 +20,24 @@ SEARCH_ROOTS = [p.strip() for p in os.environ.get('SYSTEM_FILE_SEARCH_ROOTS', st
 
 def open_application(app_name: str) -> dict:
     app_name = (app_name or '').strip()
-    if not SYSTEM_ACTIONS_ENABLED:
+    system_actions_enabled = os.environ.get('SYSTEM_ACTIONS_ENABLED', 'false').lower() == 'true'
+    if not system_actions_enabled:
         return {"ok": False, "reason": "system_actions_disabled", "reply": "System actions disabled by configuration."}
 
-    # simple allowlist check
-    if app_name.lower() not in [a.lower() for a in APP_ALLOWLIST]:
+    app_key = f"SYSTEM_APP_{app_name.upper().replace(' ', '_')}"
+    mapped_app_name = os.environ.get(app_key)
+    
+    if mapped_app_name:
+        app_name = mapped_app_name
+
+    allowlist = [s.strip() for s in os.environ.get('SYSTEM_APP_ALLOWLIST', 'code,chrome,wt,spotify').split(',') if s.strip()]
+
+    if app_name.lower() not in [a.lower() for a in allowlist]:
         return {"ok": False, "reason": "not_allowed", "reply": f"App '{app_name}' is not allowed."}
 
     try:
-        # Try os.startfile on Windows for common apps; fallback to subprocess.
-        try:
-            os.startfile(app_name)
-        except Exception:
-            args = shlex.split(app_name)
-            subprocess.Popen(args, shell=False)
+        args = ["cmd", "/c", "start", "", app_name]
+        subprocess.Popen(args, shell=False)
         return {"ok": True, "reply": f"Launched {app_name}."}
     except Exception as e:
         return {"ok": False, "reason": "launch_failed", "reply": str(e)}
@@ -45,7 +49,8 @@ def search_files(query: str, max_results: int = 10) -> List[str]:
         return []
 
     results = []
-    roots = SEARCH_ROOTS if len(SEARCH_ROOTS) > 0 else [str(Path.home())]
+    search_roots_env = os.environ.get('SYSTEM_FILE_SEARCH_ROOTS', str(Path(__file__).resolve().parents[1]))
+    roots = [p.strip() for p in search_roots_env.split(',') if p.strip()] if search_roots_env else [str(Path.home())]
 
     for root in roots:
         root_path = Path(root)
@@ -87,7 +92,7 @@ def search_web(query: str) -> dict:
         return {"ok": True, "reply": f"Opened web search for '{query}' in browser (requests/bs4 not installed).", "url": url}
     
     try:
-        url = "https://html.duckduckgo.com/html/"
+        url = "https://lite.duckduckgo.com/lite/"
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
         data = {"q": query}
         res = requests.post(url, data=data, headers=headers, timeout=10)
@@ -95,8 +100,10 @@ def search_web(query: str) -> dict:
         
         soup = BeautifulSoup(res.text, "html.parser")
         results = []
-        for a in soup.find_all('a', class_='result__snippet', limit=3):
-            results.append(a.get_text(strip=True))
+        for td in soup.find_all('td', class_='result-snippet'):
+            results.append(td.get_text(strip=True))
+            if len(results) >= 3:
+                break
         
         if not results:
             return {"ok": True, "reply": f"No results found for '{query}'.", "results": []}

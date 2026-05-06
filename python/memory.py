@@ -70,6 +70,19 @@ def init_db():
           value TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS app_usage (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          app_name TEXT NOT NULL,
+          launched_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS patterns (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          pattern_description TEXT NOT NULL,
+          confidence_score REAL DEFAULT 0.5,
+          created_at TEXT NOT NULL
+        );
         """
     )
     conn.commit()

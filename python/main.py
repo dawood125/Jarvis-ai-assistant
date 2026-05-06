@@ -5,10 +5,10 @@ from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import memory, brain
-
 env_path = Path(__file__).resolve().parents[1] / "jarvis" / ".env"
 load_dotenv(dotenv_path=env_path)
+
+from . import memory, brain
 app = FastAPI(title="Jarvis Python Agent")
 
 # Allow the frontend dev server to call this backend during development
@@ -125,13 +125,61 @@ async def post_journal(request: Request):
     return JSONResponse(memory.save_journal_entry(payload))
 
 
+@app.post("/api/memory/migrate")
+async def migrate_memory(request: Request):
+    payload = await request.json()
+    conversations = payload.get("conversations") if isinstance(payload, dict) else []
+    notes = payload.get("notes") if isinstance(payload, dict) else []
+    journal_entries = payload.get("journalEntries") if isinstance(payload, dict) else []
+
+    inserted = {
+        "conversations": 0,
+        "notes": 0,
+        "journalEntries": 0,
+    }
+
+    for item in conversations or []:
+      result = memory.save_conversation(
+          item.get("role", "user"),
+          item.get("text", ""),
+          item.get("label"),
+          item.get("createdAt"),
+      )
+      if result.get("ok"):
+          inserted["conversations"] += 1
+
+    for item in notes or []:
+        result = memory.save_note(item.get("text", ""), item.get("createdAt"))
+        if result.get("ok"):
+            inserted["notes"] += 1
+
+    for item in journal_entries or []:
+        result = memory.save_journal_entry(item)
+        if result.get("ok"):
+            inserted["journalEntries"] += 1
+
+    return JSONResponse({
+        "ok": True,
+        "reason": None,
+        "inserted": inserted,
+    })
+
+
 @app.post("/api/model/reply")
 async def model_reply(request: Request):
-    payload = await request.json()
-    command = None
-    # support both { command } and { provider, command }
-    if isinstance(payload, dict):
-        command = payload.get("command") or payload.get("text") or ''
+    command = ''
+    raw_body = await request.body()
+
+    if raw_body:
+        try:
+            payload = json.loads(raw_body.decode('utf-8'))
+        except Exception:
+            payload = {}
+
+        if isinstance(payload, dict):
+            command = payload.get("command") or payload.get("text") or ''
+        elif isinstance(payload, str):
+            command = payload
     else:
         command = ''
 

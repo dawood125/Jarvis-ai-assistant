@@ -78,6 +78,24 @@ Files updated:
 Verification:
 - Ran `npm run build` after change.
 
+---
+
+Date: 2026-05-06
+
+Milestone: Chunk 2 WebSocket chat wiring
+
+Summary:
+- Added a persistent WS client in `App.jsx` with reconnect logic and connection status tracking.
+- Unknown chat messages now prefer WS first and fall back to `resolveModelReply()` HTTP route if the socket is unavailable.
+- The chat header shows WS connection state (Connected / Connecting / Retrying / Error).
+
+Files updated:
+- `jarvis/src/App.jsx`
+- `jarvis/src/components/ChatStage.jsx`
+
+Verification:
+- Ran `npm run build` successfully after the WS integration.
+
 References:
 - Plan details: `Plan/SecondPlan.md`
 - Session plan: `/memories/session/plan.md`

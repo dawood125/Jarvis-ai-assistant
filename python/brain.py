@@ -111,6 +111,26 @@ def _execute_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     return {"ok": False, "reason": "unknown_tool", "reply": f"Unknown tool: {name}"}
 
 
+def _is_simple_greeting(text: str) -> bool:
+    normalized = text.lower().strip()
+    greeting_starters = ("hello", "hi", "hey", "good morning", "good evening", "good afternoon")
+    return any(normalized.startswith(prefix) for prefix in greeting_starters)
+
+
+def _handle_small_talk(text: str) -> str | None:
+    normalized = text.lower().strip()
+
+    if _is_simple_greeting(text):
+        if "how are you" in normalized:
+            return "I’m operating at peak efficiency, sir. What are we tackling today?"
+        return "Good to see you, sir. What can I do for you?"
+
+    if normalized in {"thanks", "thank you", "thx"}:
+        return "Always, sir."
+
+    return None
+
+
 async def _handle_with_groq(message: str) -> str:
     if Groq is None or not GROQ_API_KEY:
         raise RuntimeError("Groq client unavailable")
@@ -176,6 +196,11 @@ async def handle_message(message: str) -> str:
         return "I didn't get that."
 
     memory.save_conversation("user", text)
+
+    small_talk_reply = _handle_small_talk(text)
+    if small_talk_reply:
+        memory.save_conversation("jarvis", small_talk_reply)
+        return small_talk_reply
 
     if GROQ_API_KEY and Groq is not None:
         try:

@@ -44,3 +44,6 @@
 ## 🔒 Privacy & Data
 
 Built for a **Local-First** privacy model. All conversation memory, telemetry, and user preferences are stored strictly locally via SQLite. API keys are managed safely via local environment variables.
+
+
+& '.\.venv\Scripts\python.exe' -m uvicorn python.main:app --reload --port 8788

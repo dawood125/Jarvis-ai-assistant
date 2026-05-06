@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ChevronRight, Mic, Send } from 'lucide-react'
 
-function ChatStage({ messages, onSubmitCommand, isProcessing }) {
+function ChatStage({ messages, onSubmitCommand, isProcessing, wsStatus }) {
   const [commandText, setCommandText] = useState('')
   const feedRef = useRef(null)
 
@@ -33,9 +33,9 @@ function ChatStage({ messages, onSubmitCommand, isProcessing }) {
     >
       <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
         <span className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Communication Link</span>
-        <span className="flex items-center gap-2 text-xs text-emerald-400">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-          Secure
+        <span className={`flex items-center gap-2 text-xs ${wsStatus === 'connected' ? 'text-emerald-400' : 'text-amber-300'}`}>
+          <span className={`h-2 w-2 rounded-full ${wsStatus === 'connected' ? 'animate-pulse bg-emerald-400' : 'bg-amber-300'}`} />
+          WS {wsStatus === 'connected' ? 'Connected' : wsStatus === 'connecting' ? 'Connecting' : wsStatus === 'disconnected' ? 'Retrying' : 'Error'}
         </span>
       </div>
 

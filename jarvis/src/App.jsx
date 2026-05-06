@@ -365,6 +365,7 @@ function App() {
   const [modelConfig, setModelConfig] = useState(() => readModelConfig())
   const [userProfile, setUserProfile] = useState(() => createDefaultUserProfile())
   const [panelFocus, setPanelFocus] = useState(PANEL_TABS.ACTIONS)
+  const [wsStatus, setWsStatus] = useState('connecting')
   const [bridgeHealth, setBridgeHealth] = useState({
     status: 'unknown',
     systemActionsEnabled: false,
@@ -378,36 +379,105 @@ function App() {
   const responseTimerRef = useRef(null)
   const memorySyncRef = useRef(false)
   const wsRef = useRef(null)
+  const wsReconnectTimerRef = useRef(null)
+  const mountedRef = useRef(false)
 
   useEffect(() => {
-    const wsUrl = resolveBridgeWebSocketUrl()
-    const ws = new WebSocket(wsUrl)
-    
-    ws.onmessage = (event) => {
+    mountedRef.current = true
+
+    const connectWebSocket = () => {
+      if (!mountedRef.current) {
+        return
+      }
+
       try {
-        const payload = JSON.parse(event.data)
-        if (payload.type === 'reply') {
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: 'jarvis',
-              label: 'JARVIS CORE',
-              text: payload.text,
-              createdAt: new Date().toISOString(),
-            },
-          ])
-          setIsProcessing(false)
+        setWsStatus('connecting')
+        const ws = new WebSocket(resolveBridgeWebSocketUrl())
+        wsRef.current = ws
+
+        ws.onopen = () => {
+          if (!mountedRef.current) {
+            return
+          }
+          setWsStatus('connected')
+        }
+
+        ws.onmessage = (event) => {
+          if (!mountedRef.current) {
+            return
+          }
+
+          try {
+            const payload = JSON.parse(event.data)
+            if (payload.type === 'reply') {
+              const nextMessage = {
+                role: 'jarvis',
+                label: 'JARVIS CORE',
+                text: payload.text,
+                createdAt: new Date().toISOString(),
+              }
+
+              setMessages((prev) => [...prev, nextMessage])
+
+              if (bridgeHealth.status === 'online') {
+                void persistConversationMessage(nextMessage)
+              }
+
+              setRecentActivity((prev) => [
+                {
+                  ago: 'just now',
+                  label: 'WebSocket reply received',
+                },
+                ...prev,
+              ].slice(0, 6))
+
+              setIsProcessing(false)
+            }
+          } catch {
+            // Ignore malformed frames.
+          }
+        }
+
+        ws.onerror = () => {
+          if (!mountedRef.current) {
+            return
+          }
+          setWsStatus('error')
+        }
+
+        ws.onclose = () => {
+          if (!mountedRef.current) {
+            return
+          }
+
+          setWsStatus('disconnected')
+          if (wsReconnectTimerRef.current) {
+            window.clearTimeout(wsReconnectTimerRef.current)
+          }
+
+          wsReconnectTimerRef.current = window.setTimeout(() => {
+            connectWebSocket()
+          }, 2500)
         }
       } catch {
-        // ignore
+        if (mountedRef.current) {
+          setWsStatus('error')
+        }
       }
     }
-    
-    wsRef.current = ws
+
+    connectWebSocket()
+
     return () => {
-      ws.close()
+      mountedRef.current = false
+      if (wsReconnectTimerRef.current) {
+        window.clearTimeout(wsReconnectTimerRef.current)
+      }
+      if (wsRef.current) {
+        wsRef.current.close()
+      }
     }
-  }, [])
+  }, [bridgeHealth.status])
 
   const statusMeters = [
     {
@@ -792,6 +862,7 @@ function App() {
           },
           ...prev,
         ].slice(0, 6))
+        setPanelFocus(PANEL_TABS.ACTIONS)
         return
       }
 
@@ -835,6 +906,7 @@ function App() {
                 messages={messages}
                 onSubmitCommand={handleCommand}
                 isProcessing={isProcessing}
+                wsStatus={wsStatus}
               />
             </div>
             <IntelPanel
