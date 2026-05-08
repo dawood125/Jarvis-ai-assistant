@@ -36,8 +36,8 @@ def open_application(app_name: str) -> dict:
         return {"ok": False, "reason": "not_allowed", "reply": f"App '{app_name}' is not allowed."}
 
     try:
-        args = ["cmd", "/c", "start", "", app_name]
-        subprocess.Popen(args, shell=False)
+        # Strategy 1: use cmd /c start without title (works for registered aliases & UWP apps)
+        subprocess.Popen(["cmd", "/c", "start", app_name], shell=False)
         return {"ok": True, "reply": f"Launched {app_name}."}
     except Exception as e:
         return {"ok": False, "reason": "launch_failed", "reply": str(e)}
@@ -84,31 +84,144 @@ def get_notes(memory_get_notes_func, limit: int = 10) -> List[dict]:
 
 def search_web(query: str) -> dict:
     if not query:
-        return {"ok": False, "reason": "validation_error"}
-    
+        return {"ok": False, "reason": "validation_error", "reply": "No query provided."}
+
     if requests is None or BeautifulSoup is None:
         url = f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}"
         webbrowser.open(url)
-        return {"ok": True, "reply": f"Opened web search for '{query}' in browser (requests/bs4 not installed).", "url": url}
-    
+        return {"ok": True, "reply": f"Opened browser search for '{query}'."}
+
+    # Strategy 1: DuckDuckGo Instant Answer API (free, no scraping, JSON)
+    try:
+        api_url = "https://api.duckduckgo.com/"
+        params = {"q": query, "format": "json", "no_html": "1", "skip_disambig": "1"}
+        r = requests.get(api_url, params=params, timeout=8,
+                         headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        r.raise_for_status()
+        data = r.json()
+
+        snippets = []
+        if data.get("AbstractText"):
+            snippets.append(data["AbstractText"])
+        for related in data.get("RelatedTopics", [])[:3]:
+            if isinstance(related, dict) and related.get("Text"):
+                snippets.append(related["Text"])
+
+        if snippets:
+            summary = "\n".join([f"- {s[:300]}" for s in snippets[:4]])
+            return {"ok": True, "reply": f"Search results for '{query}':\n{summary}", "results": snippets}
+    except Exception:
+        pass  # fall through to strategy 2
+
+    # Strategy 2: DuckDuckGo Lite HTML scrape
     try:
         url = "https://lite.duckduckgo.com/lite/"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-        data = {"q": query}
-        res = requests.post(url, data=data, headers=headers, timeout=10)
-        res.raise_for_status()
-        
-        soup = BeautifulSoup(res.text, "html.parser")
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        r = requests.post(url, data={"q": query}, headers=headers, timeout=10)
+        r.raise_for_status()
+
+        soup = BeautifulSoup(r.text, "html.parser")
         results = []
-        for td in soup.find_all('td', class_='result-snippet'):
-            results.append(td.get_text(strip=True))
+        for td in soup.find_all("td", class_="result-snippet"):
+            text = td.get_text(strip=True)
+            if text:
+                results.append(text)
             if len(results) >= 3:
                 break
-        
+
+        # Also grab result titles
         if not results:
-            return {"ok": True, "reply": f"No results found for '{query}'.", "results": []}
-            
-        summary = "\n".join([f"- {r}" for r in results])
-        return {"ok": True, "reply": f"Search results for '{query}':\n{summary}", "results": results}
+            for a in soup.find_all("a", class_="result-link"):
+                results.append(a.get_text(strip=True))
+                if len(results) >= 3:
+                    break
+
+        if results:
+            summary = "\n".join([f"- {r}" for r in results])
+            return {"ok": True, "reply": f"Search results for '{query}':\n{summary}", "results": results}
+    except Exception:
+        pass
+
+    # Strategy 3: Open browser as last resort
+    url = f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}"
+    webbrowser.open(url)
+    return {"ok": True, "reply": f"I opened a browser search for '{query}' since web scraping returned no results.", "url": url}
+
+
+# Allowlist of safe terminal commands (no destructive ops)
+SAFE_COMMANDS = {
+    "dir", "ls", "echo", "type", "cat", "ipconfig", "ping", "systeminfo",
+    "tasklist", "whoami", "hostname", "date", "time", "ver", "cd", "pwd",
+    "python", "pip", "git", "node", "npm", "code", "curl"
+}
+
+
+def run_terminal_command(command: str) -> dict:
+    """Run a safe, whitelisted terminal command and return output."""
+    cmd = (command or "").strip()
+    if not cmd:
+        return {"ok": False, "reason": "empty_command", "reply": "No command provided."}
+
+    base = cmd.split()[0].lower().rstrip(".exe")
+    if base not in SAFE_COMMANDS:
+        return {
+            "ok": False,
+            "reason": "not_allowed",
+            "reply": f"Command '{base}' is not in the safe command list. I won't run that, sir."
+        }
+
+    try:
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            encoding="utf-8",
+            errors="replace"
+        )
+        output = (result.stdout or result.stderr or "").strip()
+        return {
+            "ok": True,
+            "reply": f"```\n{output[:2000]}\n```" if output else "Command ran with no output.",
+            "returncode": result.returncode,
+        }
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "reason": "timeout", "reply": "Command timed out after 15 seconds."}
     except Exception as e:
-        return {"ok": False, "reason": "search_failed", "reply": f"Web search failed: {str(e)}"}
+        return {"ok": False, "reason": "exec_error", "reply": str(e)}
+
+
+def trigger_n8n_workflow(workflow_name: str, payload: dict) -> dict:
+    """Trigger an n8n webhook workflow."""
+    if not workflow_name:
+        return {"ok": False, "reason": "validation_error", "reply": "Workflow name required."}
+
+    # In n8n, you typically set up a webhook URL per workflow.
+    # We will assume a base URL format: http://localhost:5678/webhook/{workflow_name}
+    base_url = os.environ.get("N8N_WEBHOOK_BASE_URL", "http://localhost:5678/webhook/")
+    
+    # Ensure URL ends with slash before appending name to avoid malformed URLs
+    if not base_url.endswith("/"):
+        base_url += "/"
+        
+    url = f"{base_url}{urllib.parse.quote(workflow_name)}"
+
+    if requests is None:
+        return {"ok": False, "reason": "missing_dependency", "reply": "Requests module not installed."}
+
+    try:
+        r = requests.post(url, json=payload, timeout=10)
+        r.raise_for_status()
+        
+        # n8n might return JSON or text
+        try:
+            data = r.json()
+            return {"ok": True, "reply": f"Triggered workflow '{workflow_name}'. Output:\n{json.dumps(data)}"}
+        except ValueError:
+            return {"ok": True, "reply": f"Triggered workflow '{workflow_name}'. Response:\n{r.text}"}
+    except Exception as e:
+        return {"ok": False, "reason": "request_failed", "reply": f"Failed to trigger n8n workflow '{workflow_name}': {str(e)}"}

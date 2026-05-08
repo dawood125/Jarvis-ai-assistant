@@ -295,3 +295,43 @@ def save_user_profile(payload: dict) -> Dict[str, Any]:
     )
     conn.commit()
     return {"ok": True, "profile": get_user_profile()}
+
+
+def log_app_usage(app_name: str) -> bool:
+    """Learning layer: record every app launch for pattern tracking."""
+    try:
+        from datetime import datetime
+        conn = _connect()
+        now = _now_iso()
+        dt = datetime.utcnow()
+        conn.execute(
+            "INSERT INTO app_usage (app_name, launched_at) VALUES (?, ?)",
+            (app_name.lower().strip(), now),
+        )
+        conn.commit()
+        return True
+    except Exception:
+        return False
+
+
+def get_app_usage_stats(days: int = 7) -> dict:
+    """Return top launched apps in the last N days."""
+    try:
+        from datetime import datetime, timedelta
+        conn = _connect()
+        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        cur = conn.execute(
+            """
+            SELECT app_name, COUNT(*) as launch_count
+            FROM app_usage
+            WHERE launched_at > ?
+            GROUP BY app_name
+            ORDER BY launch_count DESC
+            LIMIT 10
+            """,
+            (cutoff,),
+        )
+        stats = {row["app_name"]: row["launch_count"] for row in cur.fetchall()}
+        return {"ok": True, "stats": stats}
+    except Exception as e:
+        return {"ok": False, "reason": "db_error", "error": str(e)}

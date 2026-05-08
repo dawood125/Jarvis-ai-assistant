@@ -66,6 +66,11 @@ async def system_status():
     }
 
 
+@app.get("/api/system/usage")
+async def app_usage_stats():
+    return JSONResponse(memory.get_app_usage_stats(days=7))
+
+
 @app.get("/")
 async def root():
     if FRONTEND_HTML.exists():
