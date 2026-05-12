@@ -3,8 +3,18 @@ import sqlite3
 from pathlib import Path
 from typing import List, Dict, Any
 
-DEFAULT_DB_PATH = Path(__file__).resolve().parents[1] / "jarvis" / "data" / "jarvis.db"
-DB_PATH = os.environ.get("MEMORY_DB_PATH") or str(DEFAULT_DB_PATH)
+# Try absolute path first, then fall back to relative from this file's directory
+_env_path = os.environ.get("MEMORY_DB_PATH")
+if _env_path:
+    DEFAULT_DB_PATH = Path(_env_path)
+else:
+    DEFAULT_DB_PATH = Path(__file__).resolve().parents[1] / "jarvis" / "data" / "jarvis.db"
+
+DB_PATH = str(DEFAULT_DB_PATH)
+
+# Ensure the data directory exists
+DB_DIR = DEFAULT_DB_PATH.parent
+DB_DIR.mkdir(parents=True, exist_ok=True)
 
 _conn: sqlite3.Connection | None = None
 
@@ -81,6 +91,21 @@ def init_db():
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           pattern_description TEXT NOT NULL,
           confidence_score REAL DEFAULT 0.5,
+          created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS reminders (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          message TEXT NOT NULL,
+          remind_at TEXT NOT NULL,
+          completed INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS learned_facts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          fact TEXT NOT NULL,
+          category TEXT DEFAULT 'general',
           created_at TEXT NOT NULL
         );
         """
@@ -335,3 +360,74 @@ def get_app_usage_stats(days: int = 7) -> dict:
         return {"ok": True, "stats": stats}
     except Exception as e:
         return {"ok": False, "reason": "db_error", "error": str(e)}
+
+
+def learn_fact(fact: str, category: str = "general") -> Dict[str, Any]:
+    """Save a new fact about Dawood that JARVIS should remember."""
+    fact_text = _safe_text(fact)
+    if not fact_text:
+        return {"ok": False, "reason": "validation_error", "reply": "Fact text required."}
+
+    conn = _connect()
+    now = _now_iso()
+    conn.execute(
+        "INSERT INTO learned_facts (fact, category, created_at) VALUES (?, ?, ?)",
+        (fact_text, _safe_text(category, "general"), now)
+    )
+    conn.commit()
+    return {"ok": True, "reply": f"Got it, sir. I'll remember: {fact_text}"}
+
+
+def get_learned_facts(category: str | None = None, limit: int = 20) -> List[Dict[str, Any]]:
+    """Get all learned facts, optionally filtered by category."""
+    conn = _connect()
+    cur = conn.cursor()
+    if category:
+        cur.execute(
+            "SELECT fact, category, created_at FROM learned_facts WHERE category = ? ORDER BY created_at DESC LIMIT ?",
+            (category, limit)
+        )
+    else:
+        cur.execute(
+            "SELECT fact, category, created_at FROM learned_facts ORDER BY created_at DESC LIMIT ?",
+            (limit,)
+        )
+    rows = cur.fetchall()
+    return [{"fact": r["fact"], "category": r["category"], "createdAt": r["created_at"]} for r in rows]
+
+
+def set_reminder(message: str, remind_at: str) -> Dict[str, Any]:
+    """Create a reminder for Dawood."""
+    msg = _safe_text(message)
+    if not msg:
+        return {"ok": False, "reason": "validation_error", "reply": "Reminder message required."}
+
+    conn = _connect()
+    now = _now_iso()
+
+    # Parse the remind_at time - support ISO format or simple time
+    remind_time = _safe_text(remind_at, now)
+
+    conn.execute(
+        "INSERT INTO reminders (message, remind_at, created_at) VALUES (?, ?, ?)",
+        (msg, remind_time, now)
+    )
+    conn.commit()
+    return {"ok": True, "reply": f"Reminder set, sir. I'll remind you: {msg}"}
+
+
+def get_reminders(limit: int = 10) -> List[Dict[str, Any]]:
+    """Get upcoming reminders that haven't been completed."""
+    conn = _connect()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT message, remind_at, completed, created_at FROM reminders WHERE completed = 0 ORDER BY remind_at ASC LIMIT ?",
+        (limit,)
+    )
+    rows = cur.fetchall()
+    return [{
+        "message": r["message"],
+        "remindAt": r["remind_at"],
+        "completed": bool(r["completed"]),
+        "createdAt": r["created_at"]
+    } for r in rows]

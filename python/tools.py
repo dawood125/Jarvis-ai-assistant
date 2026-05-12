@@ -200,14 +200,11 @@ def trigger_n8n_workflow(workflow_name: str, payload: dict) -> dict:
     if not workflow_name:
         return {"ok": False, "reason": "validation_error", "reply": "Workflow name required."}
 
-    # In n8n, you typically set up a webhook URL per workflow.
-    # We will assume a base URL format: http://localhost:5678/webhook/{workflow_name}
     base_url = os.environ.get("N8N_WEBHOOK_BASE_URL", "http://localhost:5678/webhook/")
-    
-    # Ensure URL ends with slash before appending name to avoid malformed URLs
+
     if not base_url.endswith("/"):
         base_url += "/"
-        
+
     url = f"{base_url}{urllib.parse.quote(workflow_name)}"
 
     if requests is None:
@@ -216,8 +213,7 @@ def trigger_n8n_workflow(workflow_name: str, payload: dict) -> dict:
     try:
         r = requests.post(url, json=payload, timeout=10)
         r.raise_for_status()
-        
-        # n8n might return JSON or text
+
         try:
             data = r.json()
             return {"ok": True, "reply": f"Triggered workflow '{workflow_name}'. Output:\n{json.dumps(data)}"}
@@ -225,3 +221,83 @@ def trigger_n8n_workflow(workflow_name: str, payload: dict) -> dict:
             return {"ok": True, "reply": f"Triggered workflow '{workflow_name}'. Response:\n{r.text}"}
     except Exception as e:
         return {"ok": False, "reason": "request_failed", "reply": f"Failed to trigger n8n workflow '{workflow_name}': {str(e)}"}
+
+
+def close_application(app_name: str) -> dict:
+    """Close a running application on Windows."""
+    app_name = (app_name or '').strip()
+    if not app_name:
+        return {"ok": False, "reason": "validation_error", "reply": "App name required."}
+
+    system_actions_enabled = os.environ.get('SYSTEM_ACTIONS_ENABLED', 'false').lower() == 'true'
+    if not system_actions_enabled:
+        return {"ok": False, "reason": "system_actions_disabled", "reply": "System actions disabled by configuration."}
+
+    try:
+        # Try to close by process name
+        subprocess.run(f"taskkill /IM {app_name}.exe /F", shell=True, capture_output=True)
+        return {"ok": True, "reply": f"Closed {app_name}."}
+    except Exception as e:
+        return {"ok": False, "reason": "close_failed", "reply": str(e)}
+
+
+def read_file(file_path: str) -> dict:
+    """Read the content of a specific file."""
+    if not file_path:
+        return {"ok": False, "reason": "validation_error", "reply": "File path required."}
+
+    try:
+        path = Path(file_path)
+        if not path.exists():
+            return {"ok": False, "reason": "file_not_found", "reply": f"File not found: {file_path}"}
+
+        # Limit file size to 100KB to avoid memory issues
+        if path.stat().st_size > 100 * 1024:
+            return {"ok": False, "reason": "file_too_large", "reply": "File too large (>100KB). I can only read smaller files."}
+
+        content = path.read_text(encoding="utf-8", errors="replace")
+        return {"ok": True, "content": content, "file_path": str(path)}
+    except Exception as e:
+        return {"ok": False, "reason": "read_error", "reply": str(e)}
+
+
+def list_directory(directory_path: str) -> dict:
+    """List files and folders in a directory."""
+    if not directory_path:
+        return {"ok": False, "reason": "validation_error", "reply": "Directory path required."}
+
+    try:
+        path = Path(directory_path)
+        if not path.exists():
+            return {"ok": False, "reason": "directory_not_found", "reply": f"Directory not found: {directory_path}"}
+
+        if not path.is_dir():
+            return {"ok": False, "reason": "not_a_directory", "reply": f"Not a directory: {directory_path}"}
+
+        items = []
+        for item in path.iterdir():
+            items.append({
+                "name": item.name,
+                "type": "folder" if item.is_dir() else "file",
+                "path": str(item)
+            })
+
+        return {"ok": True, "items": items, "count": len(items)}
+    except Exception as e:
+        return {"ok": False, "reason": "list_error", "reply": str(e)}
+
+
+def open_url(url: str) -> dict:
+    """Open a specific URL in the browser."""
+    if not url:
+        return {"ok": False, "reason": "validation_error", "reply": "URL required."}
+
+    try:
+        # Ensure URL has a scheme
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
+
+        webbrowser.open(url)
+        return {"ok": True, "reply": f"Opened {url} in browser."}
+    except Exception as e:
+        return {"ok": False, "reason": "open_error", "reply": str(e)}

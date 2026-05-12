@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(.venv\\\\Scripts\\\\python test_minimax_tools.py)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" test_minimax_tools.py)",
+      "Bash(\"D:\\\\Website development\\\\AI projects\\\\Jarvis AI Personal Assistant\\\\python\\\\.venv\\\\Scripts\\\\python.exe\" \"D:\\\\Website development\\\\AI projects\\\\Jarvis AI Personal Assistant\\\\python\\\\test_minimax_tools.py\")"
+    ]
+  }
+}

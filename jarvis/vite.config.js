@@ -11,12 +11,16 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: process.env.MODEL_BRIDGE_PROXY_TARGET || 'http://localhost:8787',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
       '/health': {
-        target: process.env.MODEL_BRIDGE_PROXY_TARGET || 'http://localhost:8787',
+        target: 'http://localhost:8000',
         changeOrigin: true,
+      },
+      '/ws': {
+        target: 'http://localhost:8000',
+        ws: true,
       },
     },
   },

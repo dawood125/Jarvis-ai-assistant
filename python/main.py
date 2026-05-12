@@ -1,15 +1,22 @@
 import json
+import os
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-env_path = Path(__file__).resolve().parents[1] / "jarvis" / ".env"
+# Load Python backend .env first
+env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
+# Also load jarvis .env for shared config
+jarvis_env_path = Path(__file__).resolve().parents[1] / "jarvis" / ".env"
+load_dotenv(dotenv_path=jarvis_env_path, override=False)
+
 from . import memory, brain
-app = FastAPI(title="Jarvis Python Agent")
+
+app = FastAPI(title="JARVIS AI Assistant")
 
 # Allow the frontend dev server to call this backend during development
 ALLOWED_ORIGINS = [
@@ -17,6 +24,7 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:8000",
 ]
 
 app.add_middleware(
@@ -38,13 +46,18 @@ async def startup_event():
 
 @app.get("/health")
 async def health():
+    openrouter_key = bool(os.environ.get("MINIMAX_API_KEY"))  # MINIMAX_API_KEY now holds OpenRouter key
+    groq_key = bool(os.environ.get("GROQ_API_KEY"))
+
     return {
         "status": "online",
-        "systemActionsEnabled": True,
+        "systemActionsEnabled": os.environ.get("SYSTEM_ACTIONS_ENABLED", "true").lower() == "true",
         "providers": {
-            "groq": True,
-            "openrouter": False,
-        }
+            "minimax": openrouter_key,
+            "groq": groq_key,
+            "openrouter": openrouter_key,
+        },
+        "primaryModel": "MiniMax M2.5 (via OpenRouter)" if openrouter_key else "Unknown",
     }
 
 
@@ -214,7 +227,30 @@ async def websocket_endpoint(ws: WebSocket):
                 payload = {"type": "message", "text": data}
 
             text = payload.get("text") if isinstance(payload, dict) else str(payload)
-            reply = await brain.handle_message(text)
-            await ws.send_text(json.dumps({"type": "reply", "text": reply}))
+
+            # Create a sender function for this WebSocket connection
+            async def ws_sender(msg):
+                await ws.send_text(json.dumps(msg))
+
+            # Handle message with WebSocket sender for status updates
+            reply = await brain.handle_message(text, ws_sender=ws_sender)
+
+            # Send the final reply
+            await ws.send_text(json.dumps({
+                "type": "reply",
+                "text": reply,
+                "status": "done"
+            }))
+
     except WebSocketDisconnect:
         return
+    except Exception as e:
+        print(f"[WebSocket error]: {e}")
+        try:
+            await ws.send_text(json.dumps({
+                "type": "reply",
+                "text": f"I encountered an error: {str(e)[:100]}",
+                "status": "error"
+            }))
+        except Exception:
+            pass
